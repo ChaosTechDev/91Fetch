@@ -2,7 +2,19 @@
 
 English | [简体中文](README.md)
 
-91Fetch is a web-based browser and batch downloader for viewkey videos. It reads category pages directly, displays titles, thumbnails, authors, durations, and view counts, and adds selected videos to a persistent download queue.
+[![License: MIT](https://img.shields.io/badge/License-MIT-f5c542.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab.svg)](https://www.python.org/)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ed.svg)](Dockerfile)
+[![Tests: 26 passed](https://img.shields.io/badge/Tests-26%20passed-2ea44f.svg)](tests)
+[![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch)
+
+## About
+
+91Fetch is an open-source web application specifically built for browsing and batch-downloading videos from the **91porn website**. It reads latest, popular, featured, ranked, HD, and original-video categories as well as author pages. It collects titles, thumbnails, authors, durations, view counts, and viewkeys so users can select individual videos or download an entire visible page.
+
+Before downloading, 91Fetch resolves the actual `.m3u8` or `.mp4` media URL. It uses yt-dlp for concurrent HLS fragments, retries, and resume support. The download queue, progress, and completion records persist across application restarts.
+
+Project homepage: [https://github.com/ChaosTechDev/91Fetch](https://github.com/ChaosTechDev/91Fetch)
 
 ## Features
 
