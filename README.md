@@ -2,7 +2,19 @@
 
 [English](README_EN.md) | 简体中文
 
-91Fetch 是一个带网页界面的 viewkey 视频浏览与批量下载工具。它可以直接读取站点分类分页，展示标题、封面、作者、时长和播放量，并将选中的视频加入持久化下载队列。
+[![License: MIT](https://img.shields.io/badge/License-MIT-f5c542.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab.svg)](https://www.python.org/)
+[![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ed.svg)](Dockerfile)
+[![Tests: 26 passed](https://img.shields.io/badge/Tests-26%20passed-2ea44f.svg)](tests)
+[![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch)
+
+## 软件简介
+
+91Fetch 是专用于浏览和批量下载 **91porn 网站**视频的开源工具，提供中文网页管理界面。它可以读取 91porn 的最新发布、当前最热、加精推荐、排行榜、高清视频、原创视频等分类，也可以读取指定作者主页；采集视频标题、封面、作者、时长、播放量和 viewkey 后，用户可以勾选或全选下载。
+
+下载前会解析真实的 `.m3u8` 或 `.mp4` 媒体地址，并通过 yt-dlp 实现 HLS 分片并发、失败重试和断点续传。下载队列、进度和完成记录会持久保存，重新启动软件后仍可继续管理。
+
+项目主页：[https://github.com/ChaosTechDev/91Fetch](https://github.com/ChaosTechDev/91Fetch)
 
 ## 功能
 
