@@ -442,28 +442,13 @@ function watchJob(job) {
   }, 1200);
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   readRoute();
   $("#searchInput").value = saved.search || "";
   applyControlState();
   setView(state.activeView, {sync: false});
   syncRoute(true);
   if (window.lucide) lucide.createIcons();
-  try {
-    const config = await api("/api/config");
-    $("#siteHost").textContent = new URL(config.base_url).host;
-  } catch (_) {}
-  const auth = await api("/api/auth/status").catch(() => ({enabled: false, authenticated: true}));
-  if (auth.username && $("#settingUsername")) $("#settingUsername").value = auth.username;
-  if (auth.enabled && !auth.authenticated) {
-    showLogin();
-  } else {
-    await loadSettings();
-    restartDownloadPolling();
-    if (state.activeView === "downloads") await loadDownloads();
-    else if (state.activeView === "catalog") { await loadCatalog(); await loadDownloads(); }
-  }
-
   $("#themeToggle").addEventListener("click", () => {
     const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
@@ -619,6 +604,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       await loadCatalog();
     } catch (error) { toast(error.message, true); }
   });
+
+  // Keep the interface interactive while a slow listing page is loading.
+  void (async () => {
+    try {
+      const config = await api("/api/config");
+      $("#siteHost").textContent = new URL(config.base_url).host;
+    } catch (_) {}
+    const auth = await api("/api/auth/status").catch(() => ({enabled: false, authenticated: true}));
+    if (auth.username && $("#settingUsername")) $("#settingUsername").value = auth.username;
+    if (auth.enabled && !auth.authenticated) {
+      showLogin();
+      return;
+    }
+    await loadSettings();
+    restartDownloadPolling();
+    if (state.activeView === "downloads") await loadDownloads();
+    else if (state.activeView === "catalog") { await loadCatalog(); await loadDownloads(); }
+  })();
 });
 
 window.addEventListener("popstate", () => {

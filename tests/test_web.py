@@ -14,7 +14,16 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=13" in response.text
+    assert "app.js?v=14" in response.text
+
+
+def test_ui_controls_bind_before_initial_network_load():
+    script = (web.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    select_all_binding = script.index('$("#selectAll").addEventListener')
+    initial_loader = script.index("void (async () =>", select_all_binding)
+    first_initial_request = script.index('await api("/api/config")', initial_loader)
+
+    assert select_all_binding < initial_loader < first_initial_request
 
 
 def test_web_config_exposes_categories():
