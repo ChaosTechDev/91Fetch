@@ -5,8 +5,31 @@ build-backend = "hatchling.build"
 [project]
 name = "91fetch"
 version = "1.0.0"
-description = "Web UI for browsing, selecting, and downloading viewkey videos"
+description = "Web UI for browsing and batch-downloading 91porn viewkey videos"
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = [
+  "91porn",
+  "viewkey",
+  "video-downloader",
+  "m3u8-downloader",
+  "hls-downloader",
+  "batch-downloader",
+  "yt-dlp",
+  "fastapi",
+  "docker",
+]
 requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Multimedia :: Video",
+]
 dependencies = [
   "beautifulsoup4>=4.12.3",
   "httpx[brotli,http2]>=0.27.2",
@@ -23,6 +46,12 @@ test = ["pytest>=8.3.3", "respx>=0.21.1"]
 [project.scripts]
 91fetch = "viewkey_batch.cli:app"
 91fetch-web = "viewkey_batch.web:main"
+
+[project.urls]
+Homepage = "https://github.com/ChaosTechDev/91Fetch"
+Repository = "https://github.com/ChaosTechDev/91Fetch.git"
+Issues = "https://github.com/ChaosTechDev/91Fetch/issues"
+Documentation = "https://github.com/ChaosTechDev/91Fetch#readme"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/viewkey_batch"]
