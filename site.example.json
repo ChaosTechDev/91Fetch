@@ -1,0 +1,25 @@
+{
+  "base_url": "https://91porn.com",
+  "category_urls": {
+    "latest": "/v.php?next=watch",
+    "hot": "/v.php?category=hot&viewtype=basic",
+    "featured": "/v.php?category=rf&viewtype=basic",
+    "top_week": "/v.php?category=top&viewtype=basic",
+    "most_favorited": "/v.php?category=mf&viewtype=basic",
+    "most_discussed": "/v.php?category=md&viewtype=basic",
+    "hd": "/v.php?category=hd&viewtype=basic",
+    "original": "/v.php?category=ori&viewtype=basic"
+  },
+  "author_url": "/uvideos.php?UID={author}&type=public",
+  "page_param": "page",
+  "first_page": 1,
+  "video_link_selector": "a[href*='view_video.php?viewkey='], a[href*='view_video_hd.php?viewkey=']",
+  "title_selectors": ["h1", "h2", "title"],
+  "author_selectors": [".author a", "a[href*='uvideos.php?UID=']", "a[href*='UID=']"],
+  "timeout": 30,
+  "request_interval": 1.5,
+  "request_jitter": 1.0,
+  "max_retries": 5,
+  "backoff_base": 2.0,
+  "stop_on_challenge": true
+}
