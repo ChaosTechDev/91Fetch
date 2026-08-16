@@ -23,7 +23,7 @@ def viewkey_from_url(url: str) -> str:
 
 def parse_listing(html: str, page_url: str, config: SiteConfig) -> list[VideoItem]:
     soup = BeautifulSoup(html, "html.parser")
-    candidates: dict[str, list[VideoItem]] = {}
+    candidates: list[VideoItem] = []
     for anchor in soup.select(config.video_link_selector):
         href = anchor.get("href")
         if not href:
@@ -45,7 +45,7 @@ def parse_listing(html: str, page_url: str, config: SiteConfig) -> list[VideoIte
         details = container.get_text(" ", strip=True) if container else ""
         author_match = re.search(r"(?:From|作者)\s*:\s*(.+?)(?=\s+(?:Views|播放|Favorites|收藏|Comments|评论|$))", details, re.I)
         views_match = re.search(r"(?:Views|播放)\s*:\s*([\d,.]+)", details, re.I)
-        candidates.setdefault(key, []).append(
+        candidates.append(
             VideoItem(
                 page_url=url,
                 viewkey=key,
@@ -56,19 +56,22 @@ def parse_listing(html: str, page_url: str, config: SiteConfig) -> list[VideoIte
                 views=views_match.group(1) if views_match else "",
             )
         )
+    all_tokens = {
+        parse_qs(urlparse(item.page_url).query).get("c", [""])[0]
+        for item in candidates
+    }
     found: list[VideoItem] = []
-    for items in candidates.values():
-        tokens = {parse_qs(urlparse(item.page_url).query).get("c", [""])[0] for item in items}
-        # Listing pages may inject a decoy duplicate whose c token is the real
-        # token prefixed with "a". Its title and thumbnail belong to another card.
-        real_items = [
-            item for item in items
-            if not (
-                (token := parse_qs(urlparse(item.page_url).query).get("c", [""])[0]).startswith("a")
-                and token[1:] in tokens
-            )
-        ]
-        found.append((real_items or items)[0])
+    seen: set[str] = set()
+    for item in candidates:
+        token = parse_qs(urlparse(item.page_url).query).get("c", [""])[0]
+        # Hidden cards use the current page token prefixed with "a" and may
+        # carry another card's key, title, and thumbnail.
+        if token.startswith("a") and token[1:] in all_tokens:
+            continue
+        if item.identity in seen:
+            continue
+        seen.add(item.identity)
+        found.append(item)
     return found
 
 

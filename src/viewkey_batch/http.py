@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from email.utils import parsedate_to_datetime
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 import json
 import logging
 import random
@@ -68,7 +69,7 @@ def _retry_after(response: httpx.Response) -> float | None:
 class RateLimitedClient:
     """Session client with host-friendly pacing and bounded retry behavior."""
 
-    def __init__(self, config: SiteConfig, cookies: dict[str, str]):
+    def __init__(self, config: SiteConfig, cookies: dict[str, str], warmup: bool = False):
         self.config = config
         self._last_request = 0.0
         self._client = httpx.Client(
@@ -78,8 +79,14 @@ class RateLimitedClient:
             follow_redirects=True,
             http2=True,
         )
+        self._warmup = warmup
+        self._warmed = False
 
     def __enter__(self) -> "RateLimitedClient":
+        if self._warmup and not self._warmed:
+            response = self.get(urljoin(self.config.base_url, f"/index.php?_vkb={time.time_ns()}"))
+            response.raise_for_status()
+            self._warmed = True
         return self
 
     def __exit__(self, *args: object) -> None:
@@ -130,4 +137,4 @@ class RateLimitedClient:
 
 
 def build_client(config: SiteConfig, cookies: dict[str, str]) -> RateLimitedClient:
-    return RateLimitedClient(config, cookies)
+    return RateLimitedClient(config, cookies, warmup=True)

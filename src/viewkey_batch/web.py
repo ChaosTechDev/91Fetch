@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from datetime import datetime
-from threading import Lock, Thread, Timer
+from threading import Event, Lock, Thread, Timer
 from time import time
 from typing import Literal
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -11,11 +11,6 @@ import json
 import os
 import re
 import socket
-import base64
-import binascii
-import hashlib
-import hmac
-import secrets
 import uuid
 import webbrowser
 
@@ -26,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
 
-from .crawler import Crawler, with_page
+from .crawler import Crawler, fresh_listing_url, listing_page_url
 from .downloader import BatchDownloader, validate_media_file
 from .http import build_client, load_cookies
 from .models import SiteConfig, VideoItem
@@ -41,10 +36,6 @@ CATALOG_PATH = DATA_DIR / "catalog.jsonl"
 STATE_PATH = DATA_DIR / "state.json"
 VIDEO_DIR = DATA_DIR / "videos"
 SETTINGS_PATH = DATA_DIR / "settings.json"
-AUTH_PATH = DATA_DIR / "auth.json"
-AUTH_ENABLED = os.getenv("VIEWKEY_AUTH_ENABLED", "0").lower() in {"1", "true", "yes", "on"}
-SESSION_COOKIE = "viewkey_session"
-SESSION_TTL = 7 * 24 * 60 * 60
 
 
 class AppSettings(BaseModel):
@@ -90,79 +81,6 @@ class SettingsStore:
 settings_store = SettingsStore()
 
 
-class AuthStore:
-    def __init__(self) -> None:
-        self.lock = Lock()
-        self.username = os.getenv("VIEWKEY_ADMIN_USER", "admin").strip() or "admin"
-        self.salt = ""
-        self.password_hash = ""
-        self.secret = os.getenv("VIEWKEY_SESSION_SECRET", "").strip() or secrets.token_urlsafe(32)
-        self.load()
-
-    @staticmethod
-    def _hash(password: str, salt: str) -> str:
-        return hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 240_000).hex()
-
-    def load(self) -> None:
-        try:
-            raw = json.loads(AUTH_PATH.read_text(encoding="utf-8"))
-            self.username = str(raw.get("username") or self.username)
-            self.salt = str(raw.get("salt") or "")
-            self.password_hash = str(raw.get("password_hash") or "")
-            self.secret = str(raw.get("secret") or self.secret)
-        except (OSError, json.JSONDecodeError, ValueError):
-            pass
-        if not self.salt or not self.password_hash:
-            self.salt = secrets.token_hex(16)
-            initial = os.getenv("VIEWKEY_ADMIN_PASSWORD", "").strip()
-            if AUTH_ENABLED and not initial:
-                raise RuntimeError("启用登录时必须设置 VIEWKEY_ADMIN_PASSWORD")
-            initial = initial or secrets.token_urlsafe(24)
-            self.password_hash = self._hash(initial, self.salt)
-            self.save()
-
-    def save(self) -> None:
-        DATA_DIR.mkdir(parents=True, exist_ok=True)
-        payload = {"username": self.username, "salt": self.salt, "password_hash": self.password_hash, "secret": self.secret}
-        temporary = AUTH_PATH.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        temporary.replace(AUTH_PATH)
-
-    def verify(self, username: str, password: str) -> bool:
-        with self.lock:
-            return hmac.compare_digest(username, self.username) and hmac.compare_digest(self._hash(password, self.salt), self.password_hash)
-
-    def update(self, username: str, password: str) -> None:
-        with self.lock:
-            self.username = username.strip()
-            self.salt = secrets.token_hex(16)
-            self.password_hash = self._hash(password, self.salt)
-            self.save()
-
-    def make_session(self) -> str:
-        expiry = int(time()) + SESSION_TTL
-        payload = f"{self.username}:{expiry}"
-        signature = hmac.new(self.secret.encode(), payload.encode(), hashlib.sha256).digest()
-        return base64.urlsafe_b64encode(f"{payload}:{signature.hex()}".encode()).decode().rstrip("=")
-
-    def session_user(self, token: str | None) -> str | None:
-        if not token:
-            return None
-        try:
-            raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)).decode()
-            username, expiry, supplied = raw.rsplit(":", 2)
-            payload = f"{username}:{expiry}"
-            expected = hmac.new(self.secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
-            if int(expiry) < int(time()) or not hmac.compare_digest(supplied, expected):
-                return None
-            return username if hmac.compare_digest(username, self.username) else None
-        except (ValueError, UnicodeError, binascii.Error):
-            return None
-
-
-auth_store = AuthStore()
-
-
 def get_video_dir() -> Path:
     configured = settings_store.snapshot().download_dir.strip()
     if not configured:
@@ -201,17 +119,6 @@ class DownloadRequest(BaseModel):
 
 class RemoveRequest(BaseModel):
     viewkeys: list[str]
-
-
-class LoginRequest(BaseModel):
-    username: str = Field(min_length=1, max_length=80)
-    password: str = Field(min_length=1, max_length=256)
-
-
-class PasswordRequest(BaseModel):
-    current_password: str = Field(min_length=1, max_length=256)
-    username: str = Field(min_length=1, max_length=80)
-    new_password: str = Field(min_length=8, max_length=256)
 
 
 class Store:
@@ -297,50 +204,10 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 @app.middleware("http")
 async def disable_local_cache(request: Request, call_next):
-    if AUTH_ENABLED and request.url.path.startswith("/api/") and not request.url.path.startswith("/api/auth/"):
-        if not auth_store.session_user(request.cookies.get(SESSION_COOKIE)):
-            from fastapi.responses import JSONResponse
-            return JSONResponse({"detail": "请先登录"}, status_code=401)
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     return response
-
-
-@app.get("/api/auth/status")
-def auth_status(request: Request) -> dict:
-    user = auth_store.session_user(request.cookies.get(SESSION_COOKIE)) if AUTH_ENABLED else "local"
-    return {"enabled": AUTH_ENABLED, "authenticated": bool(user), "username": user or ""}
-
-
-@app.post("/api/auth/login")
-def auth_login(payload: LoginRequest):
-    if not AUTH_ENABLED:
-        return {"authenticated": True, "username": "local"}
-    if not auth_store.verify(payload.username, payload.password):
-        raise HTTPException(401, "账号或密码错误")
-    from fastapi.responses import JSONResponse
-    response = JSONResponse({"authenticated": True, "username": auth_store.username})
-    response.set_cookie(SESSION_COOKIE, auth_store.make_session(), max_age=SESSION_TTL, httponly=True, samesite="lax")
-    return response
-
-
-@app.post("/api/auth/logout")
-def auth_logout():
-    from fastapi.responses import JSONResponse
-    response = JSONResponse({"authenticated": False})
-    response.delete_cookie(SESSION_COOKIE)
-    return response
-
-
-@app.put("/api/auth/password")
-def auth_password(request: Request, payload: PasswordRequest):
-    if AUTH_ENABLED and not auth_store.session_user(request.cookies.get(SESSION_COOKIE)):
-        raise HTTPException(401, "请先登录")
-    if AUTH_ENABLED and not auth_store.verify(auth_store.username, payload.current_password):
-        raise HTTPException(400, "当前密码错误")
-    auth_store.update(payload.username, payload.new_password)
-    return {"username": auth_store.username, "message": "账号密码已更新，请重新登录"}
 
 
 def pagination_info(html: str, current_page: int) -> dict[str, int | bool]:
@@ -377,14 +244,18 @@ def downloaded_keys() -> set[str]:
     return keys
 
 
+download_queue_wake = Event()
+
+
 def queue_download(viewkeys: list[str], workers: int, fragments: int, kind: str = "download") -> Job:
     with store.lock:
-        valid = list(dict.fromkeys(key for key in viewkeys if key in store.videos))
-        busy = any(job.kind == "download" and not job.cancelled and job.status in {"queued", "running"} for job in store.jobs.values())
+        active_keys = {
+            key for key, status in store.download_status.items()
+            if status.get("state") in {"queued", "downloading"}
+        }
+        valid = list(dict.fromkeys(key for key in viewkeys if key in store.videos and key not in active_keys))
     if not valid:
-        raise HTTPException(400, "没有有效的视频任务")
-    if busy:
-        raise HTTPException(409, "已有下载任务正在运行")
+        raise HTTPException(409, "所选视频已在下载队列中")
     with store.lock:
         for key in valid:
             store.dismissed_downloads.discard(key)
@@ -394,8 +265,55 @@ def queue_download(viewkeys: list[str], workers: int, fragments: int, kind: str 
     job = new_job(kind)
     job.total = len(valid)
     job.viewkeys = valid
-    Thread(target=download_worker, args=(job, request), daemon=True).start()
+    Thread(target=queued_download_worker, args=(job, request), daemon=True).start()
     return job
+
+
+def queued_download_worker(job: Job, request: DownloadRequest) -> None:
+    while not job.cancelled:
+        with store.lock:
+            running = any(
+                other.id != job.id and other.kind == "download"
+                and not other.cancelled and other.status == "running"
+                for other in store.jobs.values()
+            )
+            queued = sorted(
+                (other for other in store.jobs.values()
+                 if other.kind == "download" and not other.cancelled and other.status == "queued"),
+                key=lambda other: (other.started_at, other.id),
+            )
+            if not running and queued and queued[0].id == job.id:
+                break
+        download_queue_wake.wait(.4)
+        download_queue_wake.clear()
+    if job.cancelled:
+        return
+    try:
+        download_worker(job, request)
+    finally:
+        download_queue_wake.set()
+
+
+def resume_interrupted_downloads() -> None:
+    existing = downloaded_keys()
+    with store.lock:
+        interrupted = [
+            key for key, status in store.download_status.items()
+            if status.get("state") == "failed"
+            and "上次运行被中断" in status.get("error", "")
+            and key in store.videos
+        ]
+        for key in interrupted:
+            if key in existing:
+                store.download_status[key] = {"state": "completed", "percent": 100, "error": ""}
+    pending = [key for key in interrupted if key not in existing]
+    store.save_state()
+    if pending:
+        current = settings_store.snapshot()
+        try:
+            queue_download(pending, current.workers, current.fragments)
+        except HTTPException:
+            pass
 
 
 def new_job(kind: str) -> Job:
@@ -474,7 +392,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
                 listing_groups.setdefault(key, []).append(item)
 
             for (listing_url, page), grouped_items in listing_groups.items():
-                response = client.get(with_page(listing_url, config.page_param, page))
+                response = client.get(fresh_listing_url(listing_page_url(listing_url, config.page_param, page, config.first_page)))
                 response.raise_for_status()
                 fresh_items = parse_listing(response.text, str(response.url), config)
                 wanted = {item.identity for item in grouped_items}
@@ -578,8 +496,10 @@ def browse(category: str = "latest", page: int = 1) -> dict:
         raise HTTPException(400, "未知分类")
     if page < 1 or page > 10000:
         raise HTTPException(400, "页码必须在 1 到 10000 之间")
+    if category == "top_day" and page != 1:
+        raise HTTPException(400, "每日排行只有一页")
     listing_url = urljoin(config.base_url, config.category_urls[category])
-    page_url = with_page(listing_url, config.page_param, page)
+    page_url = fresh_listing_url(listing_page_url(listing_url, config.page_param, page, config.first_page))
     with build_client(config, load_cookies(None)) as client:
         response = client.get(page_url)
         response.raise_for_status()
@@ -779,6 +699,7 @@ def main() -> None:
     url = f"http://127.0.0.1:{port}"
     if os.getenv("VIEWKEY_NO_BROWSER", "0").lower() not in {"1", "true", "yes"}:
         Timer(1.2, lambda: webbrowser.open(url)).start()
+    Thread(target=resume_interrupted_downloads, daemon=True, name="viewkey-download-resume").start()
     print(f"91Fetch: {url}")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 

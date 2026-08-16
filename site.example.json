@@ -1,11 +1,11 @@
 {
   "base_url": "https://91porn.com",
   "category_urls": {
-    "top_day": "/index.php",
-    "latest": "/v.php?next=watch",
+    "latest": "/v.php?category=mr&viewtype=basic",
     "hot": "/v.php?category=hot&viewtype=basic",
     "featured": "/v.php?category=rf&viewtype=basic",
-    "top_week": "/v.php?category=top&viewtype=basic",
+    "top_day": "/index.php",
+    "top_month": "/v.php?category=top&viewtype=basic",
     "most_favorited": "/v.php?category=mf&viewtype=basic",
     "most_discussed": "/v.php?category=md&viewtype=basic",
     "hd": "/v.php?category=hd&viewtype=basic",

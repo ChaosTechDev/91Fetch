@@ -7,9 +7,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("viewkey-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=14">
+  <link rel="stylesheet" href="/static/styles.css?v=15">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-  <script src="/static/app.js?v=14" defer></script>
+  <script src="/static/app.js?v=15" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -41,7 +41,7 @@
         <button type="button" class="category-item" data-category="hot"><i data-lucide="flame"></i><span>当前最热</span></button>
         <button type="button" class="category-item" data-category="featured"><i data-lucide="badge-check"></i><span>加精推荐</span></button>
         <button type="button" class="category-item" data-category="top_day"><i data-lucide="medal"></i><span>每日排行</span></button>
-        <button type="button" class="category-item" data-category="top_week"><i data-lucide="trophy"></i><span>本周排行</span></button>
+        <button type="button" class="category-item" data-category="top_month"><i data-lucide="trophy"></i><span>本月最热</span></button>
         <button type="button" class="category-item" data-category="most_favorited"><i data-lucide="heart"></i><span>最多收藏</span></button>
         <button type="button" class="category-item" data-category="most_discussed"><i data-lucide="messages-square"></i><span>最多讨论</span></button>
         <button type="button" class="category-item" data-category="hd"><i data-lucide="circle-play"></i><span>高清视频</span></button>
@@ -141,19 +141,6 @@
           </section>
 
           <section class="settings-section">
-            <div class="settings-section-heading"><div><h2>账号安全</h2><p>修改后当前会话会退出，请使用新账号重新登录。</p></div></div>
-            <div class="settings-grid">
-              <label class="settings-field" for="settingUsername"><span>登录账号</span><input id="settingUsername" autocomplete="username" minlength="1" maxlength="80"></label>
-              <label class="settings-field" for="settingCurrentPassword"><span>当前密码</span><input id="settingCurrentPassword" type="password" autocomplete="current-password"></label>
-              <label class="settings-field" for="settingNewPassword"><span>新密码（至少 8 位）</span><input id="settingNewPassword" type="password" autocomplete="new-password" minlength="8"></label>
-              <div class="settings-field account-actions-field"><span>账号操作</span><div class="account-button-group">
-                <button class="download-button" id="changePasswordButton" type="button"><i data-lucide="shield-check"></i><span>更新账号密码</span></button>
-                <button class="ghost-button" id="logoutButton" type="button"><i data-lucide="log-out"></i><span>退出登录</span></button>
-              </div></div>
-            </div>
-          </section>
-
-          <section class="settings-section">
             <div class="settings-section-heading"><div><h2>界面刷新</h2><p>下载管理自动读取最新进度的频率。</p></div></div>
             <div class="settings-grid"><label class="settings-field" for="settingUiRefresh"><span>刷新间隔秒数</span><input id="settingUiRefresh" type="number" min="1" max="60"></label></div>
           </section>
@@ -165,16 +152,5 @@
   </div>
 
   <div id="toastRegion" class="toast-region" aria-live="polite"></div>
-  <div id="loginOverlay" class="modal-backdrop hidden">
-    <form id="loginForm" class="login-panel">
-      <div class="login-icon"><i data-lucide="lock-keyhole"></i></div>
-      <h2>登录 91Fetch</h2>
-      <p>请输入管理员账号和密码继续。</p>
-      <label class="settings-field"><span>账号</span><input id="loginUsername" autocomplete="username" required></label>
-      <label class="settings-field"><span>密码</span><input id="loginPassword" type="password" autocomplete="current-password" required></label>
-      <button class="download-button" type="submit"><i data-lucide="log-in"></i><span>登录</span></button>
-      <div id="loginError" class="form-error"></div>
-    </form>
-  </div>
 </body>
 </html>

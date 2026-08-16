@@ -1,4 +1,4 @@
-from viewkey_batch.crawler import with_page
+from viewkey_batch.crawler import fresh_listing_url, listing_page_url, with_page
 from viewkey_batch.models import SiteConfig, VideoItem
 from viewkey_batch.parser import parse_listing, parse_video_page
 
@@ -56,6 +56,15 @@ def test_listing_rejects_prefixed_decoy_duplicate():
     assert "c=token" in item.page_url
 
 
+def test_listing_rejects_page_level_decoy_with_different_viewkey():
+    html = """
+    <div class="well"><a href="/view_video.php?viewkey=wrong&c=atoken"><span class="video-title">Wrong</span></a></div>
+    <div class="well"><a href="/view_video.php?viewkey=real&c=token"><span class="video-title">Right</span></a></div>
+    """
+    items = parse_listing(html, "https://example.test/v.php", CONFIG)
+    assert [(item.viewkey, item.title) for item in items] == [("real", "Right")]
+
+
 def test_video_page_extracts_escaped_hls_url():
     html = '''<h1>Demo</h1><script>player({file: "https:\\/\\/cdn.test\\/a.m3u8?token=x"})</script>'''
     item = parse_video_page(html, "https://example.test/view_video.php?viewkey=abc", VideoItem("u", "abc"), CONFIG)
@@ -74,3 +83,12 @@ def test_video_page_prefers_encoded_per_video_source():
 
 def test_page_parameter_preserves_existing_query():
     assert with_page("https://x.test/v.php?category=hot", "page", 3) == "https://x.test/v.php?category=hot&page=3"
+
+
+def test_first_listing_page_preserves_category_and_gets_cache_buster():
+    first = listing_page_url("https://x.test/v.php?category=mr&viewtype=basic", "page", 1)
+    fresh = fresh_listing_url(first)
+    assert "category=mr" in fresh
+    assert "viewtype=basic" in fresh
+    assert "page=" not in fresh
+    assert "_vkb=" in fresh

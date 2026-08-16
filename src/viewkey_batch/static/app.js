@@ -47,21 +47,9 @@ async function api(path, options = {}) {
     ...options,
   });
   const data = await response.json();
-  if (response.status === 401) {
-    showLogin();
-  }
   if (!response.ok) throw new Error(data.detail || "请求失败");
   return data;
 }
-
-function showLogin() {
-  const overlay = $("#loginOverlay");
-  if (!overlay) return;
-  overlay.classList.remove("hidden");
-  $("#loginUsername").focus();
-}
-
-function hideLogin() { $("#loginOverlay")?.classList.add("hidden"); }
 
 function visibleVideos() {
   const query = $("#searchInput").value.trim().toLowerCase();
@@ -394,7 +382,7 @@ function setView(view, {sync = true, replace = false} = {}) {
   $("#viewTitle").textContent = view === "catalog" ? "视频目录" : view === "downloads" ? "下载管理" : "设置中心";
   $("#viewSubtitle").innerHTML = view === "catalog"
     ? `<span id="resultCount">${visibleVideos().length}</span> 个采集结果`
-    : view === "downloads" ? `${state.downloads.length} 个下载任务` : "下载目录、性能和账号设置";
+    : view === "downloads" ? `${state.downloads.length} 个下载任务` : "下载目录、性能和界面设置";
   if (sync) syncRoute(replace);
   if (window.lucide) lucide.createIcons();
 }
@@ -495,31 +483,6 @@ document.addEventListener("DOMContentLoaded", () => {
     syncRoute();
     await loadCatalog();
   });
-  $("#loginForm").addEventListener("submit", async event => {
-    event.preventDefault();
-    try {
-      const result = await api("/api/auth/login", {method: "POST", body: JSON.stringify({username: $("#loginUsername").value.trim(), password: $("#loginPassword").value})});
-      hideLogin();
-      $("#loginError").textContent = "";
-      $("#settingUsername").value = result.username;
-      toast(`已登录：${result.username}`);
-      const config = await api("/api/config");
-      $("#siteHost").textContent = new URL(config.base_url).host;
-      await loadSettings();
-      restartDownloadPolling();
-      await loadCatalog();
-      await loadDownloads();
-    } catch (error) { $("#loginError").textContent = error.message; }
-  });
-  $("#changePasswordButton").addEventListener("click", async () => {
-    try {
-      const result = await api("/api/auth/password", {method: "PUT", body: JSON.stringify({current_password: $("#settingCurrentPassword").value, username: $("#settingUsername").value.trim(), new_password: $("#settingNewPassword").value})});
-      toast(result.message);
-      await api("/api/auth/logout", {method: "POST"});
-      showLogin();
-    } catch (error) { toast(error.message, true); }
-  });
-  $("#logoutButton").addEventListener("click", async () => { await api("/api/auth/logout", {method: "POST"}); showLogin(); });
   $("#settingsForm").addEventListener("submit", async event => {
     event.preventDefault();
     const payload = collectSettings();
@@ -611,12 +574,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const config = await api("/api/config");
       $("#siteHost").textContent = new URL(config.base_url).host;
     } catch (_) {}
-    const auth = await api("/api/auth/status").catch(() => ({enabled: false, authenticated: true}));
-    if (auth.username && $("#settingUsername")) $("#settingUsername").value = auth.username;
-    if (auth.enabled && !auth.authenticated) {
-      showLogin();
-      return;
-    }
     await loadSettings();
     restartDownloadPolling();
     if (state.activeView === "downloads") await loadDownloads();

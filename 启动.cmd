@@ -5,8 +5,6 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
 title 91Fetch
-set "VIEWKEY_AUTH_ENABLED=0"
-
 set "PYTHON_CMD="
 where py >nul 2>nul && set "PYTHON_CMD=py -3"
 if not defined PYTHON_CMD where python >nul 2>nul && set "PYTHON_CMD=python"

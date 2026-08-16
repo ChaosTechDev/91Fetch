@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from time import time_ns
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import logging
 
@@ -20,6 +21,14 @@ def with_page(url: str, param: str, page: int) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def fresh_listing_url(url: str) -> str:
+    return with_page(url, "_vkb", time_ns())
+
+
+def listing_page_url(url: str, param: str, page: int, first_page: int = 1) -> str:
+    return url if page == first_page else with_page(url, param, page)
+
+
 class Crawler:
     def __init__(self, client: RateLimitedClient, config: SiteConfig):
         self.client = client
@@ -29,7 +38,7 @@ class Crawler:
         seen: set[str] = set()
         page = self.config.first_page
         while not max_pages or page < self.config.first_page + max_pages:
-            url = with_page(start_url, self.config.page_param, page)
+            url = fresh_listing_url(listing_page_url(start_url, self.config.page_param, page, self.config.first_page))
             log.info("抓取列表页 %s", url)
             response = self.client.get(url)
             response.raise_for_status()

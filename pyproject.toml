@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "91fetch"
-version = "1.0.0"
+version = "1.1.0"
 description = "Web UI for browsing and batch-downloading 91porn viewkey videos"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -17,7 +17,6 @@ keywords = [
   "batch-downloader",
   "yt-dlp",
   "fastapi",
-  "docker",
 ]
 requires-python = ">=3.11"
 classifiers = [

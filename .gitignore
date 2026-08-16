@@ -6,7 +6,6 @@ downloads/
 outputs/
 work/
 data/
-auth.json
 settings.json
 catalog.jsonl
 state.json
@@ -15,4 +14,3 @@ state.json
 *.temp
 site.json
 .env
-

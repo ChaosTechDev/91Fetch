@@ -14,7 +14,9 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=14" in response.text
+    assert "app.js?v=15" in response.text
+    assert "账号安全" not in response.text
+    assert "定时下载" not in response.text
 
 
 def test_ui_controls_bind_before_initial_network_load():
@@ -29,7 +31,33 @@ def test_ui_controls_bind_before_initial_network_load():
 def test_web_config_exposes_categories():
     response = client.get("/api/config")
     assert response.status_code == 200
-    assert {"top_day", "latest", "hot", "featured"}.issubset(response.json()["categories"])
+    assert {"top_day", "top_month", "latest", "hot", "featured"}.issubset(response.json()["categories"])
+    assert "top_week" not in response.json()["categories"]
+
+
+def test_download_queue_accepts_another_batch_while_running(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "CATALOG_PATH", tmp_path / "catalog.jsonl")
+    monkeypatch.setattr(web, "STATE_PATH", tmp_path / "state.json")
+    isolated = web.Store()
+    isolated.add(VideoItem("https://example.test/watch?viewkey=abc", "abc"))
+    isolated.add(VideoItem("https://example.test/watch?viewkey=def", "def"))
+    isolated.jobs["running"] = web.Job(id="running", kind="download", status="running", viewkeys=["abc"])
+    isolated.download_status["abc"] = {"state": "downloading", "percent": 5}
+    monkeypatch.setattr(web, "store", isolated)
+
+    class DeferredThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(web, "Thread", DeferredThread)
+    job = web.queue_download(["def"], workers=2, fragments=4)
+
+    assert job.status == "queued"
+    assert job.viewkeys == ["def"]
+    assert isolated.download_status["def"]["state"] == "queued"
 
 
 def test_download_manager_loads():
