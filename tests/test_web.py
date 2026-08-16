@@ -14,13 +14,13 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=12" in response.text
+    assert "app.js?v=13" in response.text
 
 
 def test_web_config_exposes_categories():
     response = client.get("/api/config")
     assert response.status_code == 200
-    assert {"latest", "hot", "featured"}.issubset(response.json()["categories"])
+    assert {"top_day", "latest", "hot", "featured"}.issubset(response.json()["categories"])
 
 
 def test_download_manager_loads():

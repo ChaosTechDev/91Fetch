@@ -1,6 +1,7 @@
 {
   "base_url": "https://91porn.com",
   "category_urls": {
+    "top_day": "/index.php",
     "latest": "/v.php?next=watch",
     "hot": "/v.php?category=hot&viewtype=basic",
     "featured": "/v.php?category=rf&viewtype=basic",

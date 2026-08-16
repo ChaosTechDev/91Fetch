@@ -10,7 +10,7 @@ English | [简体中文](README.md)
 
 ## About
 
-91Fetch is an open-source web application specifically built for browsing and batch-downloading videos from the **91porn website**. It reads latest, popular, featured, ranked, HD, and original-video categories as well as author pages. It collects titles, thumbnails, authors, durations, view counts, and viewkeys so users can select individual videos or download an entire visible page.
+91Fetch is an open-source web application specifically built for browsing and batch-downloading videos from the **91porn website**. It reads latest, popular, featured, daily-ranked, weekly-ranked, HD, and original-video categories as well as author pages. It collects titles, thumbnails, authors, durations, view counts, and viewkeys so users can select individual videos or download an entire visible page.
 
 Before downloading, 91Fetch resolves the actual `.m3u8` or `.mp4` media URL. It uses yt-dlp for concurrent HLS fragments, retries, and resume support. The download queue, progress, and completion records persist across application restarts.
 

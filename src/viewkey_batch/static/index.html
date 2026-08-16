@@ -7,9 +7,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("viewkey-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=12">
+  <link rel="stylesheet" href="/static/styles.css?v=13">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-  <script src="/static/app.js?v=12" defer></script>
+  <script src="/static/app.js?v=13" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -40,6 +40,7 @@
         <button type="button" class="category-item active" data-category="latest"><i data-lucide="clock-3"></i><span>最新发布</span></button>
         <button type="button" class="category-item" data-category="hot"><i data-lucide="flame"></i><span>当前最热</span></button>
         <button type="button" class="category-item" data-category="featured"><i data-lucide="badge-check"></i><span>加精推荐</span></button>
+        <button type="button" class="category-item" data-category="top_day"><i data-lucide="medal"></i><span>每日排行</span></button>
         <button type="button" class="category-item" data-category="top_week"><i data-lucide="trophy"></i><span>本周排行</span></button>
         <button type="button" class="category-item" data-category="most_favorited"><i data-lucide="heart"></i><span>最多收藏</span></button>
         <button type="button" class="category-item" data-category="most_discussed"><i data-lucide="messages-square"></i><span>最多讨论</span></button>
