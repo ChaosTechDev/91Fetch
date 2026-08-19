@@ -27,12 +27,20 @@ const state = {
   jobTimer: null,
   downloadSignature: "",
   downloadFilter: "all",
+  lastErrorToast: "",
+  lastErrorAt: 0,
 };
 
 const $ = (selector) => document.querySelector(selector);
 const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);
 
 function toast(message, error = false) {
+  if (error) {
+    const now = Date.now();
+    if (state.lastErrorToast === message && now - state.lastErrorAt < 8000) return;
+    state.lastErrorToast = message;
+    state.lastErrorAt = now;
+  }
   const node = document.createElement("div");
   node.className = `toast${error ? " error" : ""}`;
   node.textContent = message;
@@ -46,8 +54,10 @@ async function api(path, options = {}) {
     cache: "no-store",
     ...options,
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.detail || "请求失败");
+  const body = await response.text();
+  let data = {};
+  try { data = body ? JSON.parse(body) : {}; } catch (_) { data = {detail: body || "服务器未返回 JSON"}; }
+  if (!response.ok) throw new Error(`服务器返回异常（HTTP ${response.status}）：${data.detail || "请求失败"}`);
   return data;
 }
 

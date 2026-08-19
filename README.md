@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-f5c542.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab.svg)](https://www.python.org/)
-[![Version: 1.1.2](https://img.shields.io/badge/Version-1.1.2-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
+[![Version: 1.1.3](https://img.shields.io/badge/Version-1.1.3-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
 
 ## 软件简介
 

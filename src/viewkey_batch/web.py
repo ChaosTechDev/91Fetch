@@ -521,15 +521,18 @@ def browse(category: str = "latest", page: int = 1) -> dict:
 @app.get("/api/downloads")
 def downloads() -> dict:
     video_dir = get_video_dir()
-    files = list(video_dir.rglob("*")) if video_dir.exists() else []
+    try:
+        files = list(video_dir.rglob("*")) if video_dir.exists() else []
+    except OSError:
+        files = []
     media_files = [
         path for path in files
-        if path.is_file() and path.name != ".downloaded.txt" and path.suffix.lower() not in {".part", ".ytdl", ".temp"}
+        if _is_media_candidate(path)
     ]
     files_by_key: dict[str, Path] = {}
     for path in media_files:
         match = re.search(r"\[([^\]]+)\]", path.name)
-        if match and (match.group(1) not in files_by_key or path.stat().st_mtime > files_by_key[match.group(1)].stat().st_mtime):
+        if match and (match.group(1) not in files_by_key or _file_mtime(path) > _file_mtime(files_by_key[match.group(1)])):
             files_by_key[match.group(1)] = path
     entries: list[dict] = []
     missing_completed: set[str] = set()
@@ -567,8 +570,8 @@ def downloads() -> dict:
                 "speed": status.get("speed", "") if status else "",
                 "error": status.get("error", "") if status else "",
                 "file_name": matched.name if matched else "",
-                "file_size": matched.stat().st_size if matched else 0,
-                "modified": matched.stat().st_mtime if matched else 0,
+                "file_size": _file_size(matched),
+                "modified": _file_mtime(matched),
             }
         )
     if missing_completed:
@@ -583,6 +586,27 @@ def downloads() -> dict:
         store.save_state()
     counts = {name: sum(entry["state"] == name for entry in entries) for name in ("queued", "downloading", "completed", "failed")}
     return {"downloads": entries, "counts": counts, "total_size": sum(entry["file_size"] for entry in entries)}
+
+
+def _is_media_candidate(path: Path) -> bool:
+    try:
+        return path.is_file() and path.name != ".downloaded.txt" and path.suffix.lower() not in {".part", ".ytdl", ".temp"}
+    except OSError:
+        return False
+
+
+def _file_size(path: Path | None) -> int:
+    try:
+        return path.stat().st_size if path else 0
+    except OSError:
+        return 0
+
+
+def _file_mtime(path: Path | None) -> float:
+    try:
+        return path.stat().st_mtime if path else 0
+    except OSError:
+        return 0
 
 
 @app.post("/api/crawl")
