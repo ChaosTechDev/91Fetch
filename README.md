@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-f5c542.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab.svg)](https://www.python.org/)
-[![Version: 1.1.1](https://img.shields.io/badge/Version-1.1.1-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
+[![Version: 1.1.2](https://img.shields.io/badge/Version-1.1.2-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
 
 ## 软件简介
 
@@ -13,6 +13,13 @@
 列表会显示视频标题、封面、作者、时长、播放量和 viewkey。勾选单个视频或全选当前页即可加入下载队列，添加后仍可继续浏览和选择。下载前会解析真实 `.m3u8` 或 `.mp4` 地址，并通过 yt-dlp 实现 HLS 分片并发、失败重试和断点续传。
 
 项目主页：[https://github.com/ChaosTechDev/91Fetch](https://github.com/ChaosTechDev/91Fetch)
+
+## 版本区别
+
+- **Windows 桌面版（本仓库与 Releases）**：解压后双击 `启动.cmd`，适合个人电脑本地运行；手动浏览分类、选择视频并加入下载队列，不包含后台定时下载、容器账号登录和 NAS 专用目录配置。
+- **Docker 版**：是独立的容器部署版本，面向 NAS/服务器，额外提供后台定时下载、库存扫描、账号登录和容器目录映射；本次桌面版 Release 不包含 Docker 文件或 NAS 配置。
+
+两个版本使用相同的站点解析和下载核心，数据目录与部署方式不互通。请根据运行环境选择对应版本，切勿把 Docker 的环境变量或 NAS 路径填入桌面版设置。
 
 ## 主要功能
 

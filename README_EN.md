@@ -4,7 +4,7 @@ English | [简体中文](README.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-f5c542.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776ab.svg)](https://www.python.org/)
-[![Version: 1.1.1](https://img.shields.io/badge/Version-1.1.1-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
+[![Version: 1.1.2](https://img.shields.io/badge/Version-1.1.2-e96b43.svg)](https://github.com/ChaosTechDev/91Fetch/releases)
 
 ## About
 
@@ -13,6 +13,13 @@ English | [简体中文](README.md)
 Listings show titles, thumbnails, authors, durations, view counts, and viewkeys. Select one video or the whole visible page and add it to the download queue without leaving the catalog. 91Fetch resolves actual `.m3u8` or `.mp4` media URLs and uses yt-dlp for concurrent HLS fragments, retries, and resume support.
 
 Project homepage: [https://github.com/ChaosTechDev/91Fetch](https://github.com/ChaosTechDev/91Fetch)
+
+## Edition Differences
+
+- **Windows desktop edition (this repository and its Releases)**: extract the package and run `启动.cmd` for local use. It provides manual browsing, selection, and download queues; it does not include background scheduled downloads, container account login, or NAS-specific paths.
+- **Docker edition**: a separate container deployment for NAS/servers, with scheduled downloads, inventory scanning, account login, and container path mappings. Docker files and NAS configuration are not included in this desktop Release.
+
+Both editions share the site parser and download core, but their data directories and deployment methods are separate. Choose the edition that matches your environment and do not copy Docker environment variables or NAS paths into the desktop settings.
 
 ## Features
 

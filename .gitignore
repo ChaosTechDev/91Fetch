@@ -12,5 +12,6 @@ state.json
 *.part
 *.ytdl
 *.temp
+*.zip
 site.json
 .env
