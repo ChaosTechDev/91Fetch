@@ -8,7 +8,7 @@ English | [简体中文](README.md)
 
 ## About
 
-91Fetch is a local web application for browsing, collecting, and batch-downloading videos from the **91porn website**. It supports latest, currently popular, featured, daily ranking, monthly popular, most favorited, most discussed, HD, and original-video categories, along with author pages and custom listing URLs.
+91Fetch is a local web application for browsing, collecting, and batch-downloading videos from the **91porn website**, designed to run directly on a Windows computer. It supports latest, currently popular, featured, daily ranking, monthly popular, most favorited, most discussed, HD, and original-video categories, along with author pages and custom listing URLs.
 
 Listings show titles, thumbnails, authors, durations, view counts, and viewkeys. Select one video or the whole visible page and add it to the download queue without leaving the catalog. 91Fetch resolves actual `.m3u8` or `.mp4` media URLs and uses yt-dlp for concurrent HLS fragments, retries, and resume support.
 
@@ -33,6 +33,8 @@ Project homepage: [https://github.com/ChaosTechDev/91Fetch](https://github.com/C
 Windows 10/11 and Python 3.11 or newer are required. Download and extract the Release archive, then double-click `启动.cmd`. On first run it creates `.venv`, installs dependencies, generates `site.json`, starts the local service, and opens the web interface.
 
 Application data is stored in `downloads/` by default, with videos in `downloads/videos/`. The video directory and archive layout can be changed in Settings.
+
+The application serves its web interface locally and listens on `127.0.0.1:8765` by default. Keep the `downloads/` directory when upgrading because it contains task state and the local downloaded-file index.
 
 Manual startup:
 
