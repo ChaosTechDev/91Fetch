@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from datetime import datetime
 from threading import Event, Lock, Thread, Timer
 from time import time
 from typing import Literal
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, quote, urljoin, urlparse
 import json
 import os
 import re
@@ -133,9 +133,13 @@ class Store:
     def _load(self) -> None:
         if CATALOG_PATH.exists():
             for line in CATALOG_PATH.read_text(encoding="utf-8").splitlines():
-                if line.strip():
+                if not line.strip():
+                    continue
+                try:
                     item = VideoItem.from_json(line)
-                    self.videos[item.identity] = item
+                except (json.JSONDecodeError, TypeError, ValueError):
+                    continue
+                self.videos[item.identity] = item
         if STATE_PATH.exists():
             try:
                 raw = json.loads(STATE_PATH.read_text(encoding="utf-8"))
@@ -225,8 +229,19 @@ def pagination_info(html: str, current_page: int) -> dict[str, int | bool]:
     }
 
 
+_downloaded_keys_cache: dict[str, tuple[float, frozenset[str]]] = {}
+_downloaded_keys_lock = Lock()
+DOWNLOADED_KEYS_TTL_SECONDS = 5.0
+
+
 def downloaded_keys() -> set[str]:
     directory = get_video_dir()
+    cache_key = str(directory)
+    now = time()
+    with _downloaded_keys_lock:
+        cached = _downloaded_keys_cache.get(cache_key)
+        if cached and now - cached[0] < DOWNLOADED_KEYS_TTL_SECONDS:
+            return set(cached[1])
     if not directory.exists():
         return set()
     keys: set[str] = set()
@@ -241,6 +256,8 @@ def downloaded_keys() -> set[str]:
         valid, _ = validate_media_file(path)
         if valid:
             keys.add(match.group(1))
+    with _downloaded_keys_lock:
+        _downloaded_keys_cache[cache_key] = (now, frozenset(keys))
     return keys
 
 
@@ -254,9 +271,8 @@ def queue_download(viewkeys: list[str], workers: int, fragments: int, kind: str 
             if status.get("state") in {"queued", "downloading"}
         }
         valid = list(dict.fromkeys(key for key in viewkeys if key in store.videos and key not in active_keys))
-    if not valid:
-        raise HTTPException(409, "所选视频已在下载队列中")
-    with store.lock:
+        if not valid:
+            raise HTTPException(409, "所选视频已在下载队列中")
         for key in valid:
             store.dismissed_downloads.discard(key)
             store.download_status[key] = {"state": "queued", "percent": 0, "error": ""}
@@ -328,13 +344,12 @@ def crawl_worker(job: Job, request: CrawlRequest) -> None:
         job.status = "running"
         config = SiteConfig.load(CONFIG_PATH)
         if request.mode == "author":
-            start_url = config.author_url.format(author=request.author)
+            # quote 同时完成 URL 转义和花括号转义，避免作者输入破坏 format 模板
+            start_url = config.author_url.format(author=quote(request.author, safe=""))
         elif request.mode == "url":
             start_url = request.url
         else:
             start_url = config.category_urls[request.category]
-        from urllib.parse import urljoin
-
         start_url = urljoin(config.base_url, start_url)
         source = request.author or request.category or "custom"
         crawled: set[str] = set()
@@ -356,6 +371,22 @@ def crawl_worker(job: Job, request: CrawlRequest) -> None:
         job.message = "采集失败"
 
 
+def _mark_cancelled(job: Job, request: DownloadRequest) -> None:
+    """任务被删除后，把还在排队/下载中的条目标记为失败，避免状态卡死。"""
+    with store.lock:
+        for key in request.viewkeys:
+            current = store.download_status.get(key)
+            if current and current.get("state") in {"queued", "downloading"}:
+                store.download_status[key] = {
+                    "state": "failed",
+                    "percent": current.get("percent", 0),
+                    "error": "任务已删除",
+                }
+    store.save_state()
+    job.status = "failed"
+    job.error = "任务已删除"
+
+
 def download_worker(job: Job, request: DownloadRequest) -> None:
     try:
         if job.cancelled:
@@ -371,12 +402,10 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
             crawler = Crawler(client, config)
             refreshed: dict[str, VideoItem] = {}
             listing_groups: dict[tuple[str, int], list[VideoItem]] = {}
-            from urllib.parse import parse_qs, urljoin, urlparse
 
             for item in items:
                 if job.cancelled:
-                    job.status = "failed"
-                    job.error = "任务已删除"
+                    _mark_cancelled(job, request)
                     return
                 listing = (
                     item.listing_url
@@ -386,8 +415,12 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
                 )
                 if not listing:
                     continue
-                page_value = parse_qs(urlparse(item.page_url).query).get("page", ["1"])[0]
-                page = int(page_value) if str(page_value).isdigit() else 1
+                # 采集时记录的列表页码优先；视频详情页 URL 本身不带 page 参数，
+                # 旧清单回退到从 URL 解析，再不行按第 1 页处理
+                page = item.listing_page
+                if page <= 0:
+                    page_value = parse_qs(urlparse(item.page_url).query).get("page", ["1"])[0]
+                    page = int(page_value) if str(page_value).isdigit() else 1
                 key = (urljoin(config.base_url, listing), page)
                 listing_groups.setdefault(key, []).append(item)
 
@@ -401,7 +434,8 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
             for index, item in enumerate(items, 1):
                 fresh_link = refreshed.get(item.identity)
                 if fresh_link:
-                    item.page_url = fresh_link.page_url
+                    # 用副本更新 page_url，避免在锁外修改 store 里的共享对象
+                    item = replace(item, page_url=fresh_link.page_url)
                 fresh = crawler.resolve(item)
                 thumb_match = re.search(r"/thumb/(?:\d+_)?(\d+)\.jpg", fresh.thumbnail_url, re.I)
                 media_match = re.search(r"/mp4\d*/(\d+)\.mp4", fresh.stream_url, re.I)
@@ -440,8 +474,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
             progress_callback=on_progress,
         ).download(resolved)
         if job.cancelled:
-            job.status = "failed"
-            job.error = "任务已删除"
+            _mark_cancelled(job, request)
             return
         failures = 0
         for item, error in results:
@@ -477,12 +510,19 @@ def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
 
 
+def _item_payload(item: VideoItem) -> dict:
+    # identity 是 viewkey 为空时的去重主键，前端用它做选择/下载的键
+    payload = asdict(item)
+    payload["identity"] = item.identity
+    return payload
+
+
 @app.get("/api/catalog")
 def catalog(category: str | None = None) -> dict:
     with store.lock:
-        items = reversed(list(store.videos.values()))
+        items = list(store.videos.values())
         videos = [
-            asdict(item) for item in items
+            _item_payload(item) for item in reversed(items)
             if not category or category in item.sources or category == item.source
         ]
         statuses = dict(store.download_status)
@@ -505,13 +545,14 @@ def browse(category: str = "latest", page: int = 1) -> dict:
         response.raise_for_status()
     items = parse_listing(response.text, str(response.url), config)
     for item in items:
+        item.listing_page = page
         item.add_source(category, listing_url)
         store.add(item)
     store.save()
     with store.lock:
         statuses = dict(store.download_status)
     return {
-        "videos": [asdict(item) for item in items],
+        "videos": [_item_payload(item) for item in items],
         "download_status": statuses,
         "downloaded_keys": sorted(downloaded_keys().intersection(item.identity for item in items)),
         "pagination": pagination_info(response.text, page),
@@ -539,8 +580,9 @@ def downloads() -> dict:
     with store.lock:
         videos = list(store.videos.values())
         statuses = dict(store.download_status)
+        dismissed = set(store.dismissed_downloads)
     for item in reversed(videos):
-        if item.identity in store.dismissed_downloads:
+        if item.identity in dismissed:
             continue
         matched = files_by_key.get(item.identity)
         status = statuses.get(item.identity)

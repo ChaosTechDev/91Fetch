@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from viewkey_batch.web import app, downloaded_keys, pagination_info
@@ -14,7 +16,7 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=15" in response.text
+    assert "app.js?v=16" in response.text
     assert "账号安全" not in response.text
     assert "定时下载" not in response.text
 
@@ -28,7 +30,13 @@ def test_ui_controls_bind_before_initial_network_load():
     assert select_all_binding < initial_loader < first_initial_request
 
 
-def test_web_config_exposes_categories():
+def test_web_config_exposes_categories(tmp_path, monkeypatch):
+    # 不依赖当前目录是否恰好存在 site.json，直接用仓库自带的示例配置
+    config_file = tmp_path / "site.json"
+    example = Path(__file__).resolve().parent.parent / "site.example.json"
+    config_file.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(web, "CONFIG_PATH", config_file)
+
     response = client.get("/api/config")
     assert response.status_code == 200
     assert {"top_day", "top_month", "latest", "hot", "featured"}.issubset(response.json()["categories"])

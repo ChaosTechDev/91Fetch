@@ -30,6 +30,7 @@ CHALLENGE_MARKERS = (
     "verify you are human",
     "人机验证",
 )
+NETSCAPE_HTTSONLY_PREFIX = "#HttpOnly_"
 log = logging.getLogger(__name__)
 
 
@@ -40,7 +41,10 @@ def load_cookies(path: Path | None) -> dict[str, str]:
     if content.lstrip().startswith("# Netscape HTTP Cookie File"):
         cookies: dict[str, str] = {}
         for line in content.splitlines():
-            if not line or line.startswith("#"):
+            # HttpOnly cookie 在 Netscape 格式里以 #HttpOnly_ 开头，并不是注释
+            if line.startswith(NETSCAPE_HTTSONLY_PREFIX):
+                line = line[len(NETSCAPE_HTTSONLY_PREFIX):]
+            elif not line or line.startswith("#"):
                 continue
             fields = line.split("\t")
             if len(fields) >= 7:
@@ -112,7 +116,13 @@ class RateLimitedClient:
                 last_error = exc
                 response = None
 
-            if response is not None and response.status_code in {403, 503} and self.config.stop_on_challenge:
+            # 只在 403/503 时做人机验证检测。正常页面也可能包含 Cloudflare
+            # 注入的 challenge-platform 脚本标记，无法用于识别 200 的挑战页。
+            if (
+                response is not None
+                and response.status_code in {403, 503}
+                and self.config.stop_on_challenge
+            ):
                 body_start = response.text[:200_000].lower()
                 if any(marker in body_start for marker in CHALLENGE_MARKERS):
                     raise RuntimeError("站点返回了人机验证页，已停止任务；请在浏览器完成验证后导出 Cookie 再继续。")

@@ -13,7 +13,9 @@ from .models import VideoItem
 
 
 log = logging.getLogger(__name__)
-MIN_MEDIA_BYTES = 256 * 1024
+# 低于该阈值的文件视为 CDN 空响应壳。正常视频即使很短也很少小于 64KB，
+# 之前的 256KB 阈值会误杀合法的小体积视频。
+MIN_MEDIA_BYTES = 64 * 1024
 
 
 def validate_media_file(path: Path) -> tuple[bool, str]:

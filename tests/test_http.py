@@ -32,6 +32,18 @@ def test_load_netscape_cookies(tmp_path):
     assert load_cookies(path) == {"session": "TOKEN"}
 
 
+def test_load_netscape_cookies_keeps_httponly(tmp_path):
+    # #HttpOnly_ 前缀是 cookie 属性标记，不是注释，不能丢
+    path = tmp_path / "cookies.txt"
+    path.write_text(
+        "# Netscape HTTP Cookie File\n"
+        ".example.test\tTRUE\t/\tFALSE\t0\tplain\tA\n"
+        "#HttpOnly_.example.test\tTRUE\t/\tTRUE\t0\tsession\tSECRET\n",
+        encoding="utf-8",
+    )
+    assert load_cookies(path) == {"plain": "A", "session": "SECRET"}
+
+
 def fast_config(**overrides):
     values = {
         "base_url": "https://example.test",
@@ -64,4 +76,17 @@ def test_rate_limited_client_stops_on_challenge():
     with RateLimitedClient(fast_config(), {}) as client:
         with pytest.raises(RuntimeError, match="人机验证"):
             client.get("https://example.test/list")
+    assert route.call_count == 1
+
+
+@respx.mock
+def test_rate_limited_client_allows_normal_pages_with_cf_beacon():
+    # Cloudflare Bot Fight Mode 会向正常页面注入 challenge-platform 脚本，
+    # 带 200 的普通页面不应被人机验证检测误杀
+    route = respx.get("https://example.test/list").mock(
+        return_value=httpx.Response(200, text='<script src="/cdn-cgi/challenge-platform/beacon.js"></script>ok')
+    )
+    with RateLimitedClient(fast_config(), {}) as client:
+        response = client.get("https://example.test/list")
+    assert response.status_code == 200
     assert route.call_count == 1

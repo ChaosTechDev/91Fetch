@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from urllib.parse import quote, urljoin
+import json
 import logging
 
 import typer
@@ -15,6 +16,7 @@ from .models import SiteConfig, VideoItem
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 console = Console()
+log = logging.getLogger(__name__)
 
 
 def setup(verbose: bool) -> None:
@@ -40,9 +42,14 @@ def read_manifest(path: Path) -> list[VideoItem]:
         return []
     unique: dict[str, VideoItem] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
-        if line.strip():
+        if not line.strip():
+            continue
+        try:
             item = VideoItem.from_json(line)
-            unique[item.identity] = item
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            log.warning("跳过清单中无法解析的一行：%s", exc)
+            continue
+        unique[item.identity] = item
     return list(unique.values())
 
 

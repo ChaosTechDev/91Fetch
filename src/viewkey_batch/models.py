@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from urllib.parse import urlparse
 import hashlib
 import json
+import logging
 import re
+
+
+log = logging.getLogger(__name__)
+
+# Windows 保留设备名不能直接作为文件名使用
+RESERVED_WINDOWS_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
+MAX_FILENAME_TITLE = 80
 
 
 @dataclass(slots=True)
@@ -20,6 +32,7 @@ class VideoItem:
     views: str = ""
     source: str = ""
     listing_url: str = ""
+    listing_page: int = 0
     sources: list[str] = field(default_factory=list)
     listing_urls: dict[str, str] = field(default_factory=dict)
 
@@ -30,7 +43,13 @@ class VideoItem:
     @property
     def filename(self) -> str:
         title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", self.title).strip(" ._")
-        return f"{title or 'video'} [{self.identity}]"
+        title = title[:MAX_FILENAME_TITLE].strip(" ._")
+        if not title:
+            title = "video"
+        # Windows 会拒绝 CON、NUL 等保留名组成的文件路径
+        if title.upper() in RESERVED_WINDOWS_NAMES:
+            title = f"_{title}"
+        return f"{title} [{self.identity}]"
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
@@ -54,7 +73,8 @@ class VideoItem:
             raw["sources"] = [source]
         if not raw.get("listing_urls") and source and listing_url:
             raw["listing_urls"] = {source: listing_url}
-        return cls(**raw)
+        known = {item.name for item in fields(cls)}
+        return cls(**{key: value for key, value in raw.items() if key in known})
 
 
 @dataclass(slots=True)
@@ -65,7 +85,6 @@ class SiteConfig:
     page_param: str = "page"
     first_page: int = 1
     video_link_selector: str = 'a[href*="viewkey="]'
-    next_page_selector: str = 'a[rel="next"], a.next, a:contains("下一页")'
     title_selectors: tuple[str, ...] = ("h1", "h2.title", "title")
     author_selectors: tuple[str, ...] = ('.author a', 'a[href*="UID="]', 'a[href*="author="]')
     timeout: float = 30.0
@@ -82,7 +101,11 @@ class SiteConfig:
         raw["author_selectors"] = tuple(
             raw.get("author_selectors", ('.author a', 'a[href*="UID="]', 'a[href*="author="]'))
         )
-        return cls(**raw)
+        known = {item.name for item in fields(cls)}
+        unknown = [key for key in raw if key not in known]
+        for key in unknown:
+            log.warning("site.json 中存在已废弃或未知的配置项 %r，已忽略", key)
+        return cls(**{key: value for key, value in raw.items() if key in known})
 
     @property
     def host(self) -> str:

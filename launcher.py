@@ -10,7 +10,10 @@ import venv
 
 ROOT = Path(__file__).resolve().parent
 VENV_DIR = ROOT / ".venv"
-PYTHON = VENV_DIR / "Scripts" / "python.exe"
+# Windows venv 的解释器在 Scripts/ 下，POSIX 在 bin/ 下
+PYTHON = (
+    VENV_DIR / "Scripts" / "python.exe" if os.name == "nt" else VENV_DIR / "bin" / "python"
+)
 
 
 def run(command: list[str], *, quiet: bool = False) -> None:

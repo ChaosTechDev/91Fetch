@@ -49,6 +49,7 @@ class Crawler:
                 break
             for item in new_items:
                 seen.add(item.identity)
+                item.listing_page = page
                 yield item
             page += 1
 

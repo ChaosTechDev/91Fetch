@@ -61,6 +61,9 @@ async function api(path, options = {}) {
   return data;
 }
 
+// identity 是后端的去重主键；旧数据没有 identity 字段时回退到 viewkey
+const videoKey = (video) => video.identity || video.viewkey;
+
 function visibleVideos() {
   const query = $("#searchInput").value.trim().toLowerCase();
   return state.videos.filter(video => {
@@ -117,17 +120,18 @@ function render(animate = false) {
   $("#catalogBadge").textContent = state.videos.length;
   $("#downloadButton").disabled = state.selected.size === 0;
   $("#removeButton").disabled = state.selected.size === 0;
-  $("#selectAll").checked = videos.length > 0 && videos.every(v => state.selected.has(v.viewkey));
-  $("#selectAll").indeterminate = videos.some(v => state.selected.has(v.viewkey)) && !$("#selectAll").checked;
+  $("#selectAll").checked = videos.length > 0 && videos.every(v => state.selected.has(videoKey(v)));
+  $("#selectAll").indeterminate = videos.some(v => state.selected.has(videoKey(v))) && !$("#selectAll").checked;
   $("#emptyState").classList.toggle("hidden", videos.length > 0);
   $("#videoGrid").classList.toggle("hidden", videos.length === 0);
 
   const grid = $("#videoGrid");
   const existing = new Map([...grid.children].map(card => [card.dataset.key, card]));
   videos.forEach((video, index) => {
-    const selected = state.selected.has(video.viewkey);
-    const status = state.statuses[video.viewkey];
-    let card = existing.get(video.viewkey);
+    const key = videoKey(video);
+    const selected = state.selected.has(key);
+    const status = state.statuses[key];
+    let card = existing.get(key);
     const contentSignature = JSON.stringify([video.title, video.author, video.thumbnail_url, video.duration, video.views]);
     if (card && card.dataset.contentSignature !== contentSignature) {
       card.remove();
@@ -135,7 +139,7 @@ function render(animate = false) {
     }
     if (!card) {
       const template = document.createElement("template");
-      template.innerHTML = `<article class="video-card" data-key="${escapeHtml(video.viewkey)}">
+      template.innerHTML = `<article class="video-card" data-key="${escapeHtml(key)}">
         <div class="thumb">
           <img src="${escapeHtml(video.thumbnail_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">
           <div class="downloaded-badge-slot"></div>
@@ -149,7 +153,7 @@ function render(animate = false) {
           <div class="metadata">
             <span class="author">${escapeHtml(video.author || video.source || "未知作者")}</span>
             ${video.views ? `<span>${escapeHtml(video.views)} 次播放</span>` : ""}
-            <span class="key">${escapeHtml(video.viewkey.slice(0, 8))}</span>
+            <span class="key">${escapeHtml((video.viewkey || video.identity || "").slice(0, 8))}</span>
           </div>
         </div>
       </article>`;
@@ -164,11 +168,11 @@ function render(animate = false) {
       render();
       });
     }
-    existing.delete(video.viewkey);
+    existing.delete(key);
     card.style.setProperty("--card-index", Math.min(index, 12));
     card.classList.toggle("selected", selected);
     card.querySelector("input").checked = selected;
-    card.querySelector(".downloaded-badge-slot").innerHTML = state.downloadedKeys.has(video.viewkey)
+    card.querySelector(".downloaded-badge-slot").innerHTML = state.downloadedKeys.has(key)
       ? '<span class="downloaded-badge"><i data-lucide="check"></i>已下载</span>'
       : "";
     grid.append(card);
@@ -306,7 +310,7 @@ async function loadCatalog() {
     $("#pageNumber").value = state.page;
     $("#previousPage").disabled = !data.pagination.has_previous;
     $("#nextPage").disabled = !data.pagination.has_next;
-    const keys = new Set(state.videos.map(v => v.viewkey));
+    const keys = new Set(state.videos.map(videoKey));
     state.selected.forEach(key => { if (!keys.has(key)) state.selected.delete(key); });
     render(true);
   } catch (error) {
@@ -333,6 +337,18 @@ async function loadDownloads() {
   } catch (error) {
     toast(error.message, true);
   }
+}
+
+// 采集任务进行中时从本地库刷新，避免高频轮询打目标站触发人机验证
+async function refreshCatalogFromStore() {
+  try {
+    const data = await api("/api/catalog");
+    state.videos = data.videos;
+    state.statuses = {...state.statuses, ...data.download_status};
+    const keys = new Set(state.videos.map(videoKey));
+    state.selected.forEach(key => { if (!keys.has(key)) state.selected.delete(key); });
+    render();
+  } catch (_) { /* 轮询失败不打断任务 */ }
 }
 
 function fillSettings(data) {
@@ -423,7 +439,10 @@ function watchJob(job) {
     try {
       const current = await api(`/api/jobs/${state.jobId}`);
       setJob(current);
-      if (current.kind === "crawl") await loadCatalog();
+      if (current.kind === "crawl") {
+        // 任务未结束时只读本地库，结束后由下方完成分支做一次真实翻页刷新
+        if (!["completed", "failed"].includes(current.status)) await refreshCatalogFromStore();
+      }
       else await loadDownloads();
       if (["completed", "failed"].includes(current.status)) {
         clearInterval(state.jobTimer);
@@ -530,7 +549,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const completed = new Set(state.downloads.filter(item => item.state === "completed").map(item => item.viewkey));
     try {
       const catalog = await api("/api/catalog");
-      const missing = catalog.videos.filter(item => !completed.has(item.viewkey)).map(item => item.viewkey);
+      const missing = catalog.videos.filter(item => !completed.has(videoKey(item))).map(videoKey);
       if (!missing.length) return toast("全部视频都已下载完成");
       const job = await api("/api/downloads", {
         method: "POST",
@@ -552,7 +571,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   $("#selectAll").addEventListener("change", event => {
-    visibleVideos().forEach(video => event.target.checked ? state.selected.add(video.viewkey) : state.selected.delete(video.viewkey));
+    visibleVideos().forEach(video => event.target.checked ? state.selected.add(videoKey(video)) : state.selected.delete(videoKey(video)));
     render();
   });
 
