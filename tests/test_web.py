@@ -16,7 +16,7 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=17" in response.text
+    assert "app.js?v=24" in response.text
     assert "账号安全" not in response.text
     assert "定时下载" not in response.text
 
@@ -211,3 +211,39 @@ def test_downloaded_filter_ignores_tiny_media_shell(tmp_path, monkeypatch):
     monkeypatch.setattr(web, "get_video_dir", lambda: video_dir)
 
     assert downloaded_keys() == {"good"}
+
+
+def test_account_cookie_roundtrip(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(web, "COOKIES_PATH", tmp_path / "cookies.txt")
+
+    # 粘贴 Cookie 请求头格式
+    response = client.post("/api/account/cookies", json={"content": "ya0uid=abc; yao_c=sessionvalue"})
+    assert response.status_code == 200
+    assert response.json()["cookie_count"] == 2
+
+    status = client.get("/api/account").json()
+    assert status["has_cookies"] is True
+    assert status["cookie_count"] == 2
+
+    assert web.app_cookies() == {"ya0uid": "abc", "yao_c": "sessionvalue"}
+
+    response = client.delete("/api/account/cookies")
+    assert response.status_code == 200
+    assert client.get("/api/account").json()["has_cookies"] is False
+
+
+def test_account_cookies_rejects_unparsable(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(web, "COOKIES_PATH", tmp_path / "cookies.txt")
+
+    response = client.post("/api/account/cookies", json={"content": "没有等号的无效内容"})
+    assert response.status_code == 400
+
+
+def test_parse_cookie_text_supports_netscape(tmp_path, monkeypatch):
+    monkeypatch.setattr(web, "DATA_DIR", tmp_path)
+    content = "# Netscape HTTP Cookie File\n.example.test\tTRUE\t/\tFALSE\t0\tsession\tTOKEN\n"
+    assert web.parse_cookie_text(content) == {"session": "TOKEN"}
+    assert web.parse_cookie_text("a=1;b=2") == {"a": "1", "b": "2"}
+    assert web.parse_cookie_text("") == {}

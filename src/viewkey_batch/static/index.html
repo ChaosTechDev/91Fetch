@@ -7,9 +7,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("viewkey-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=17">
+  <link rel="stylesheet" href="/static/styles.css?v=24">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-  <script src="/static/app.js?v=17" defer></script>
+  <script src="/static/app.js?v=24" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -35,17 +35,35 @@
       </nav>
 
       <div class="sidebar-divider"></div>
-      <div class="section-label">视频分类</div>
-      <div class="category-list">
-        <button type="button" class="category-item active" data-category="latest"><i data-lucide="clock-3"></i><span>最新发布</span></button>
-        <button type="button" class="category-item" data-category="hot"><i data-lucide="flame"></i><span>当前最热</span></button>
-        <button type="button" class="category-item" data-category="featured"><i data-lucide="badge-check"></i><span>加精推荐</span></button>
-        <button type="button" class="category-item" data-category="top_day"><i data-lucide="medal"></i><span>每日排行</span></button>
-        <button type="button" class="category-item" data-category="top_month"><i data-lucide="trophy"></i><span>本月最热</span></button>
-        <button type="button" class="category-item" data-category="most_favorited"><i data-lucide="heart"></i><span>最多收藏</span></button>
-        <button type="button" class="category-item" data-category="most_discussed"><i data-lucide="messages-square"></i><span>最多讨论</span></button>
-        <button type="button" class="category-item" data-category="hd"><i data-lucide="circle-play"></i><span>高清视频</span></button>
-        <button type="button" class="category-item" data-category="original"><i data-lucide="sparkles"></i><span>原创视频</span></button>
+      <div id="categorySection">
+        <div class="section-label">视频分类</div>
+        <div class="category-list">
+          <button type="button" class="category-item active" data-category="latest"><i data-lucide="clock-3"></i><span>最新发布</span></button>
+          <button type="button" class="category-item" data-category="hot"><i data-lucide="flame"></i><span>当前最热</span></button>
+          <button type="button" class="category-item" data-category="featured"><i data-lucide="badge-check"></i><span>加精推荐</span></button>
+          <button type="button" class="category-item" data-category="top_day"><i data-lucide="medal"></i><span>每日排行</span></button>
+          <button type="button" class="category-item" data-category="top_month"><i data-lucide="trophy"></i><span>本月最热</span></button>
+          <button type="button" class="category-item" data-category="most_favorited"><i data-lucide="heart"></i><span>最多收藏</span></button>
+          <button type="button" class="category-item" data-category="most_discussed"><i data-lucide="messages-square"></i><span>最多讨论</span></button>
+          <button type="button" class="category-item" data-category="hd"><i data-lucide="circle-play"></i><span>高清视频</span></button>
+          <button type="button" class="category-item" data-category="original"><i data-lucide="sparkles"></i><span>原创视频</span></button>
+        </div>
+      </div>
+      <div id="downloadFilterSection" class="hidden">
+        <div class="section-label">任务分类</div>
+        <div class="category-list">
+          <button type="button" class="category-item" data-filter="pending"><i data-lucide="loader"></i><span>未完成</span><b id="filterPendingBadge">0</b></button>
+          <button type="button" class="category-item" data-filter="completed"><i data-lucide="check-circle-2"></i><span>已下载</span><b id="filterCompletedBadge">0</b></button>
+          <button type="button" class="category-item" data-filter="failed"><i data-lucide="alert-triangle"></i><span>下载失败</span><b id="filterFailedBadge">0</b></button>
+        </div>
+      </div>
+      <div id="settingsNavSection" class="hidden">
+        <div class="section-label">设置分类</div>
+        <div class="category-list">
+          <button type="button" class="category-item" data-settings-section="settingsAccount"><i data-lucide="user-check"></i><span>账号登录</span></button>
+          <button type="button" class="category-item" data-settings-section="settingsStorage"><i data-lucide="hard-drive"></i><span>存储与下载</span></button>
+          <button type="button" class="category-item" data-settings-section="settingsRefresh"><i data-lucide="gauge"></i><span>界面刷新</span></button>
+        </div>
       </div>
 
       <div class="sidebar-divider"></div>
@@ -109,17 +127,11 @@
         <div class="download-selection-bar">
           <label class="check-control"><input type="checkbox" id="selectAllDownloads"><span></span>全选任务</label>
           <div class="selection-count">已选择 <strong id="selectedDownloadCount">0</strong> 项</div>
-          <div class="download-filter-group" role="group" aria-label="任务筛选">
-            <button class="download-filter active" type="button" data-filter="all">全部</button>
-            <button class="download-filter" type="button" data-filter="pending">未完成</button>
-            <button class="download-filter" type="button" data-filter="completed">已完成</button>
-          </div>
           <button class="ghost-button" id="downloadMissingButton"><i data-lucide="list-restart"></i><span>下载全部未完成</span></button>
           <button class="ghost-button" id="retryAllButton" disabled><i data-lucide="rotate-ccw"></i><span>重试失败</span></button>
           <button class="ghost-button" id="downloadSelectedButton" disabled><i data-lucide="download"></i><span>下载所选</span></button>
           <button class="ghost-button danger" id="removeDownloadsButton" disabled title="移除任务，不删除本地视频文件"><i data-lucide="trash-2"></i><span>删除任务</span></button>
         </div>
-        <div class="download-list-header"><span>视频</span><span>文件</span><span>状态</span><span>操作</span></div>
         <div id="downloadList" class="download-list"></div>
         <div id="downloadEmpty" class="empty-state compact">
           <div class="empty-visual"><i data-lucide="inbox"></i></div>
@@ -130,18 +142,45 @@
 
       <div id="settingsView" class="hidden">
         <form id="settingsForm" class="settings-form">
-          <section class="settings-section">
+          <section class="settings-section" id="settingsAccount">
+            <div class="settings-section-heading"><div><h2>账号登录</h2><p>登录站点账号后可下载 VIP 高清视频，采集与下载会自动携带登录态。</p></div></div>
+            <div class="login-card">
+              <div class="login-fields">
+                <label class="settings-field" for="accountUsername"><span>用户名</span><input id="accountUsername" autocomplete="off"></label>
+                <label class="settings-field" for="accountPassword"><span>密码</span><input id="accountPassword" type="password" autocomplete="new-password"></label>
+                <div class="settings-field"><span>验证码</span>
+                  <div class="captcha-row">
+                    <input id="accountCaptcha" maxlength="10" placeholder="输入图片字符">
+                    <img id="captchaImage" class="captcha-image" title="看不清？点击刷新" alt="验证码">
+                  </div>
+                </div>
+              </div>
+              <div class="login-actions">
+                <button class="primary-button login-button" id="loginButton" type="button"><i data-lucide="log-in"></i><span>登录</span></button>
+                <button class="ghost-button" id="verifyLoginButton" type="button">检测登录状态</button>
+                <button class="ghost-button danger" id="logoutButton" type="button">退出登录</button>
+              </div>
+              <div class="account-status"><span id="accountStatus">检查中…</span></div>
+              <details class="cookie-fallback">
+                <summary>无法直接登录？粘贴浏览器导出的 Cookie</summary>
+                <textarea id="settingCookies" class="cookie-input" rows="4" placeholder="粘贴 Cookie 请求头（如 ya0uid=...; yao_c=...）或 Netscape cookie 文件内容"></textarea>
+                <button class="ghost-button" id="saveCookiesButton" type="button">保存 Cookie</button>
+              </details>
+            </div>
+          </section>
+
+          <section class="settings-section" id="settingsStorage">
             <div class="settings-section-heading"><div><h2>存储与下载</h2><p>下载目录、归档方式和并发参数会保存在本机。</p></div></div>
             <div class="settings-grid storage-settings-grid">
               <label class="settings-field settings-wide" for="settingDownloadDir"><span>下载目录</span><input id="settingDownloadDir" placeholder="例如 downloads/videos"></label>
               <label class="settings-field" for="settingFolderMode"><span>归档方式</span><select id="settingFolderMode"><option value="flat">直接保存到目录</option><option value="date">按日期建文件夹</option><option value="category">按分类建文件夹</option><option value="date_category">按日期和分类</option></select></label>
               <label class="settings-field" for="settingWorkers"><span>并行任务数</span><input id="settingWorkers" type="number" min="1" max="8"></label>
               <label class="settings-field" for="settingFragments"><span>单任务分片数</span><input id="settingFragments" type="number" min="1" max="16"></label>
-              <label class="check-control settings-wide" title="优先解析高清版视频页，没有高清版时自动使用普通画质"><input id="settingPreferHd" type="checkbox"><span></span><span>优先获取高清视频</span></label>
+              <label class="check-control settings-wide" title="优先解析高清版视频页；站点的高清画质需要 VIP 账号登录（命令行可用 Cookie），无权限时自动回退普通画质"><input id="settingPreferHd" type="checkbox"><span></span><span>优先获取高清视频（需 VIP 登录）</span></label>
             </div>
           </section>
 
-          <section class="settings-section">
+          <section class="settings-section" id="settingsRefresh">
             <div class="settings-section-heading"><div><h2>界面刷新</h2><p>下载管理自动读取最新进度的频率。</p></div></div>
             <div class="settings-grid"><label class="settings-field" for="settingUiRefresh"><span>刷新间隔秒数</span><input id="settingUiRefresh" type="number" min="1" max="60"></label></div>
           </section>

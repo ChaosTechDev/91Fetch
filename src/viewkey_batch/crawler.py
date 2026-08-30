@@ -73,7 +73,11 @@ class Crawler:
                     # 该视频没有高清版页面，回退普通页
                     log.info("高清页不存在，回退普通页 %s", item.page_url)
                 else:
-                    return parse_video_page(response.text, str(response.url), item, self.config)
+                    resolved = parse_video_page(response.text, str(response.url), item, self.config)
+                    if resolved.stream_url:
+                        return resolved
+                    # 高清页存在但没有视频源：站点只向 VIP 登录会话提供高清流
+                    log.info("高清页未返回视频地址（高清画质需要 VIP 登录），回退普通页 %s", item.page_url)
         response = self.client.get(item.page_url)
         response.raise_for_status()
         return parse_video_page(response.text, str(response.url), item, self.config)

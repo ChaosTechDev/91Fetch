@@ -106,11 +106,17 @@ class RateLimitedClient:
             time.sleep(delay)
 
     def get(self, url: str) -> httpx.Response:
+        return self._request("GET", url)
+
+    def post(self, url: str, data: dict | None = None, headers: dict | None = None) -> httpx.Response:
+        return self._request("POST", url, data=data, headers=headers)
+
+    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
         last_error: Exception | None = None
         for attempt in range(self.config.max_retries + 1):
             self._pace()
             try:
-                response = self._client.get(url)
+                response = self._client.request(method, url, **kwargs)
                 self._last_request = time.monotonic()
             except httpx.TransportError as exc:
                 last_error = exc

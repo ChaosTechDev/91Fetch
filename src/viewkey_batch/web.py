@@ -7,12 +7,15 @@ from threading import Event, Lock, Thread, Timer
 from time import time
 from typing import Literal
 from urllib.parse import parse_qs, quote, urljoin, urlparse
+import base64
 import json
 import os
 import re
 import socket
 import uuid
 import webbrowser
+
+import httpx
 
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Request
@@ -36,6 +39,7 @@ CATALOG_PATH = DATA_DIR / "catalog.jsonl"
 STATE_PATH = DATA_DIR / "state.json"
 VIDEO_DIR = DATA_DIR / "videos"
 SETTINGS_PATH = DATA_DIR / "settings.json"
+COOKIES_PATH = DATA_DIR / "cookies.txt"
 
 
 class AppSettings(BaseModel):
@@ -120,6 +124,62 @@ class DownloadRequest(BaseModel):
 
 class RemoveRequest(BaseModel):
     viewkeys: list[str]
+
+
+class CookieRequest(BaseModel):
+    content: str
+
+
+class LoginRequest(BaseModel):
+    sid: str
+    username: str
+    password: str
+    captcha: str
+
+
+# 浏览器内直接登录站点时使用的临时会话（绑定验证码图片），10 分钟过期
+_login_sessions: dict[str, tuple[float, httpx.Client]] = {}
+_login_sessions_lock = Lock()
+LOGIN_SESSION_TTL_SECONDS = 600.0
+
+
+def _expire_login_sessions() -> None:
+    now = time()
+    expired = [sid for sid, (created, _) in _login_sessions.items() if now - created > LOGIN_SESSION_TTL_SECONDS]
+    for sid in expired:
+        _, client = _login_sessions.pop(sid)
+        client.close()
+
+
+def app_cookies() -> dict[str, str]:
+    """网页模式使用的会话 Cookie；用户在设置中心保存后所有请求自动携带。"""
+    if not COOKIES_PATH.exists():
+        return {}
+    try:
+        return load_cookies(COOKIES_PATH)
+    except (OSError, json.JSONDecodeError, KeyError, IndexError):
+        return {}
+
+
+def parse_cookie_text(content: str) -> dict[str, str]:
+    """解析粘贴的 Cookie，支持 Netscape 文件内容和 Cookie 请求头两种格式。"""
+    content = content.strip()
+    if not content:
+        return {}
+    if content.startswith("# Netscape"):
+        temporary = DATA_DIR / ".cookie-import.tmp"
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        temporary.write_text(content, encoding="utf-8")
+        try:
+            return load_cookies(temporary)
+        finally:
+            temporary.unlink(missing_ok=True)
+    cookies: dict[str, str] = {}
+    for pair in content.replace("\n", ";").split(";"):
+        name, _, value = pair.strip().partition("=")
+        if name and value:
+            cookies[name.strip()] = value.strip()
+    return cookies
 
 
 class Store:
@@ -354,7 +414,7 @@ def crawl_worker(job: Job, request: CrawlRequest) -> None:
         start_url = urljoin(config.base_url, start_url)
         source = request.author or request.category or "custom"
         crawled: set[str] = set()
-        with build_client(config, load_cookies(None)) as client:
+        with build_client(config, app_cookies()) as client:
             crawler = Crawler(client, config)
             for item in crawler.crawl(start_url, request.pages):
                 item.add_source(source, start_url)
@@ -400,7 +460,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
         job.total = len(items)
         job.message = "正在刷新视频地址"
         resolved: list[VideoItem] = []
-        with build_client(config, load_cookies(None)) as client:
+        with build_client(config, app_cookies()) as client:
             crawler = Crawler(client, config)
             refreshed: dict[str, VideoItem] = {}
             listing_groups: dict[tuple[str, int], list[VideoItem]] = {}
@@ -472,6 +532,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
             get_video_dir(),
             request.workers,
             request.fragments,
+            cookies=COOKIES_PATH if COOKIES_PATH.exists() else None,
             folder_mode=settings_store.snapshot().folder_mode,
             progress_callback=on_progress,
         ).download(resolved)
@@ -542,7 +603,7 @@ def browse(category: str = "latest", page: int = 1) -> dict:
         raise HTTPException(400, "每日排行只有一页")
     listing_url = urljoin(config.base_url, config.category_urls[category])
     page_url = fresh_listing_url(listing_page_url(listing_url, config.page_param, page, config.first_page))
-    with build_client(config, load_cookies(None)) as client:
+    with build_client(config, app_cookies()) as client:
         response = client.get(page_url)
         response.raise_for_status()
     items = parse_listing(response.text, str(response.url), config)
@@ -749,6 +810,138 @@ def update_settings(request: AppSettings) -> dict:
         settings_store.value = request
     settings_store.save()
     return settings_payload()
+
+
+def save_session_cookies(session: httpx.Client) -> int:
+    """把登录会话的 Cookie 以 Netscape 格式落盘，供采集/下载使用。"""
+    # session 可能是包着 httpx.Client 的 RateLimitedClient
+    jar = getattr(session, "_client", session).cookies.jar
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    lines = ["# Netscape HTTP Cookie File"]
+    for cookie in jar:
+        domain = cookie.domain or ""
+        lines.append("\t".join([
+            domain,
+            "TRUE" if domain.startswith(".") else "FALSE",
+            cookie.path or "/",
+            "TRUE" if cookie.secure else "FALSE",
+            str(int(cookie.expires or 2147483647)),
+            cookie.name,
+            cookie.value or "",
+        ]))
+    temporary = COOKIES_PATH.with_suffix(".tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary.replace(COOKIES_PATH)
+    return len(lines) - 1
+
+
+@app.get("/api/account")
+def account_status() -> dict:
+    cookies = app_cookies()
+    return {"has_cookies": bool(cookies), "cookie_count": len(cookies)}
+
+
+@app.get("/api/account/captcha")
+def account_captcha() -> dict:
+    """新建登录会话并返回绑定该会话的验证码图片。"""
+    config = SiteConfig.load(CONFIG_PATH)
+    # 复用带限速和重试的会话客户端：站点时常瞬断 TLS 连接，裸 httpx 单次请求会直接失败
+    session = build_client(config, {})
+    try:
+        session.get(urljoin(config.base_url, "/login.php"))
+        image = session.get(urljoin(config.base_url, "/captcha.php"))
+        image.raise_for_status()
+    except (httpx.HTTPError, RuntimeError):
+        session.close()
+        raise HTTPException(502, "获取验证码失败，请稍后重试")
+    sid = uuid.uuid4().hex[:12]
+    with _login_sessions_lock:
+        _expire_login_sessions()
+        _login_sessions[sid] = (time(), session)
+    mime = image.headers.get("content-type", "image/png").split(";")[0]
+    return {"sid": sid, "image": f"data:{mime};base64,{base64.b64encode(image.content).decode()}"}
+
+
+@app.post("/api/account/login")
+def account_login(request: LoginRequest) -> dict:
+    with _login_sessions_lock:
+        entry = _login_sessions.pop(request.sid, None)
+    if entry is None:
+        raise HTTPException(400, "验证码会话已过期，请刷新验证码后重试")
+    session = entry[1]
+    config = SiteConfig.load(CONFIG_PATH)
+    fingerprint = uuid.uuid4().hex
+    try:
+        response = session.post(
+            urljoin(config.base_url, "/login.php"),
+            data={
+                "username": request.username,
+                "password": request.password,
+                "fingerprint": fingerprint,
+                "fingerprint2": fingerprint,
+                "captcha_input": request.captcha,
+                "action_login": "Log In",
+                "submit": "提交",
+            },
+            headers={"Referer": urljoin(config.base_url, "/login.php")},
+        )
+    except (httpx.HTTPError, RuntimeError):
+        session.close()
+        return {"ok": False, "message": "网络请求失败，请重试"}
+    html = response.text
+    lowered = html.lower()
+    # 登录会话一次性使用，无论成败都释放连接；Cookie 已在会话对象里，关闭客户端不影响读取
+    session.close()
+    if "logout" in lowered or "退出" in html:
+        count = save_session_cookies(session)
+        return {"ok": True, "message": "登录成功", "cookie_count": count}
+    if "验证码" in html or "captcha" in lowered:
+        message = "登录失败：验证码错误"
+    elif "密码" in html or "password" in lowered:
+        message = "登录失败：用户名或密码错误"
+    else:
+        message = "登录失败，请检查账号信息后重试"
+    return {"ok": False, "message": message}
+
+
+@app.post("/api/account/cookies")
+def save_cookies(request: CookieRequest) -> dict:
+    cookies = parse_cookie_text(request.content)
+    if not cookies:
+        raise HTTPException(400, "无法解析 Cookie，请粘贴 Cookie 请求头或 Netscape 文件内容")
+    # 统一转成 Netscape 格式落盘，解析器和 yt-dlp 都能直接使用
+    config = SiteConfig.load(CONFIG_PATH)
+    host = urlparse(config.base_url).netloc.split(":")[0]
+    domain = host if host.startswith(".") else f".{host}"
+    lines = ["# Netscape HTTP Cookie File"]
+    for name, value in cookies.items():
+        lines.append("\t".join([domain, "TRUE", "/", "FALSE", "2147483647", name, value]))
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = COOKIES_PATH.with_suffix(".tmp")
+    temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    temporary.replace(COOKIES_PATH)
+    return {"ok": True, "cookie_count": len(cookies)}
+
+
+@app.delete("/api/account/cookies")
+def clear_cookies() -> dict:
+    COOKIES_PATH.unlink(missing_ok=True)
+    return {"ok": True}
+
+
+@app.post("/api/account/verify")
+def verify_login() -> dict:
+    config = SiteConfig.load(CONFIG_PATH)
+    cookies = app_cookies()
+    if not cookies:
+        return {"logged_in": False, "has_cookies": False, "cookie_count": 0, "message": "尚未登录"}
+    with build_client(config, cookies) as client:
+        response = client.get(urljoin(config.base_url, "/"))
+        response.raise_for_status()
+    html = response.text
+    logged_in = "logout" in html.lower() or "退出" in html
+    message = "已登录" if logged_in else "Cookie 无效或已过期，请重新登录"
+    return {"logged_in": logged_in, "has_cookies": True, "cookie_count": len(cookies), "message": message}
 
 
 def available_port(start: int = 8765) -> int:

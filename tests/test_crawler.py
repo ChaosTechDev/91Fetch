@@ -31,14 +31,37 @@ def test_to_hd_url_keeps_non_video_pages():
 @respx.mock
 def test_resolve_prefer_hd_uses_hd_page():
     hd_route = respx.get("https://example.test/view_video_hd.php?viewkey=abc").mock(
-        return_value=httpx.Response(200, text="<h1>高清标题</h1>")
+        return_value=httpx.Response(
+            200,
+            text='<html><body><video src="https://cdn.example.test/mp4hd/999.mp4"></video></body></html>',
+        )
     )
     with RateLimitedClient(fast_config(), {}) as client:
         item = Crawler(client, fast_config()).resolve(
             VideoItem("https://example.test/view_video.php?viewkey=abc", "abc"), prefer_hd=True
         )
-    assert item.title == "高清标题"
+    assert item.stream_url.endswith("999.mp4")
     assert hd_route.call_count == 1
+
+
+@respx.mock
+def test_resolve_prefer_hd_falls_back_when_hd_page_has_no_stream():
+    # 站点对无 VIP 会话返回 200 的高清页，但页面里没有视频源
+    respx.get("https://example.test/view_video_hd.php?viewkey=abc").mock(
+        return_value=httpx.Response(200, text="<html><head><title>hd shell</title></head><body><h1>空页面</h1></body></html>")
+    )
+    normal_route = respx.get("https://example.test/view_video.php?viewkey=abc").mock(
+        return_value=httpx.Response(
+            200,
+            text='<html><body><video src="https://cdn.example.test/mp43/123.mp4"></video></body></html>',
+        )
+    )
+    with RateLimitedClient(fast_config(), {}) as client:
+        item = Crawler(client, fast_config()).resolve(
+            VideoItem("https://example.test/view_video.php?viewkey=abc", "abc"), prefer_hd=True
+        )
+    assert item.stream_url.endswith("123.mp4")
+    assert normal_route.call_count == 1
 
 
 @respx.mock

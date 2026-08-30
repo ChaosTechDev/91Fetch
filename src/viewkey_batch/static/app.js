@@ -25,8 +25,10 @@ const state = {
   animationTimer: null,
   jobId: null,
   jobTimer: null,
+  captchaSid: null,
   downloadSignature: "",
-  downloadFilter: "all",
+  downloadFilter: "pending",
+  settingsSection: saved.settingsSection || "settingsAccount",
   lastErrorToast: "",
   lastErrorAt: 0,
 };
@@ -80,6 +82,7 @@ function persistUiState() {
     mode: state.mode,
     category: state.category,
     page: state.page,
+    settingsSection: state.settingsSection,
     search: $("#searchInput")?.value || "",
   }));
 }
@@ -188,8 +191,32 @@ function render(animate = false) {
   if (window.lucide) lucide.createIcons();
 }
 
+// 侧栏任务分类的统一筛选规则，工具栏全选也复用
+function downloadsMatchingFilter(filter) {
+  return state.downloads.filter(item => {
+    switch (filter) {
+      case "pending": return item.state !== "completed";
+      case "downloading": return item.state === "downloading";
+      case "queued": return item.state === "queued";
+      case "failed": return item.state === "failed";
+      case "completed": return item.state === "completed";
+      default: return true;
+    }
+  });
+}
+
+function updateDownloadSidebar(counts) {
+  const pending = counts.queued + counts.downloading + counts.failed;
+  $("#filterPendingBadge").textContent = pending;
+  $("#filterCompletedBadge").textContent = counts.completed;
+  $("#filterFailedBadge").textContent = counts.failed;
+  document.querySelectorAll("#downloadFilterSection .category-item").forEach(item => {
+    item.classList.toggle("active", item.dataset.filter === state.downloadFilter);
+  });
+}
+
 function renderDownloads(totalSize = 0) {
-  const visibleDownloads = state.downloads.filter(item => state.downloadFilter === "completed" ? item.state === "completed" : state.downloadFilter === "pending" ? item.state !== "completed" : true);
+  const visibleDownloads = downloadsMatchingFilter(state.downloadFilter);
   const counts = {queued: 0, downloading: 0, completed: 0, failed: 0, ...state.downloadCounts};
   $("#queuedCount").textContent = counts.queued;
   $("#downloadingCount").textContent = counts.downloading;
@@ -201,6 +228,7 @@ function renderDownloads(totalSize = 0) {
   const active = counts.queued + counts.downloading;
   $("#activeDownloadBadge").textContent = active;
   $("#activeDownloadBadge").classList.toggle("hidden", active === 0);
+  updateDownloadSidebar(counts);
   $("#downloadEmpty").classList.toggle("hidden", visibleDownloads.length > 0);
   $("#downloadList").classList.toggle("hidden", visibleDownloads.length === 0);
   $("#downloadEmpty h2").textContent = state.downloads.length ? "当前筛选没有任务" : "还没有下载任务";
@@ -218,42 +246,45 @@ function renderDownloads(totalSize = 0) {
   if (signature !== state.downloadSignature) {
     state.downloadSignature = signature;
     $("#downloadList").innerHTML = state.downloads.map(item => `
-    <div class="download-row" data-key="${escapeHtml(item.viewkey)}" data-action-state="">
-      <div class="download-video">
-        <label class="check-control download-row-select" title="选择任务"><input class="download-checkbox" data-key="${escapeHtml(item.viewkey)}" type="checkbox"><span></span></label>
-        <img src="${escapeHtml(item.thumbnail_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
-        <strong title="${escapeHtml(item.title)}">${escapeHtml(item.title || item.viewkey)}</strong>
-      </div>
-      <div class="file-info">
-        <strong title="${escapeHtml(item.file_name)}">${escapeHtml(item.file_name || "等待生成文件")}</strong>
-        <span>${item.file_size ? formatBytes(item.file_size) : escapeHtml(item.viewkey)}</span>
-      </div>
-      <div class="row-status ${escapeHtml(item.state)}">
-        <div class="row-status-line"><span>${stateText(item)}</span><span>${item.speed ? escapeHtml(item.speed) : `${item.percent || 0}%`}</span></div>
+    <div class="download-row ${escapeHtml(item.state)}" data-key="${escapeHtml(item.viewkey)}" data-action-state="">
+      <label class="check-control download-row-select" title="选择任务"><input class="download-checkbox" data-key="${escapeHtml(item.viewkey)}" type="checkbox"><span></span></label>
+      <div class="download-thumb"><img src="${escapeHtml(item.thumbnail_url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.classList.add('is-hidden')"></div>
+      <div class="download-info">
+        <strong class="download-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title || item.viewkey)}</strong>
+        <span class="download-meta"><span class="meta-file"></span><span class="meta-sep" hidden>·</span><span class="meta-size"></span><span class="meta-sep" hidden>·</span><span class="meta-extra"></span></span>
         <div class="row-progress"><span style="width:${item.percent || 0}%"></span></div>
       </div>
-      <div class="row-action"></div>
+      <div class="download-side">
+        <span class="download-state"></span>
+        <div class="row-action"></div>
+      </div>
     </div>
     `).join("");
   }
 
   const rows = new Map([...document.querySelectorAll(".download-row")].map(row => [row.dataset.key, row]));
-  document.querySelectorAll(".download-filter").forEach(button => button.classList.toggle("active", button.dataset.filter === state.downloadFilter));
   state.downloads.forEach(item => {
     const row = rows.get(item.viewkey);
     if (!row) return;
     row.classList.toggle("hidden", !visibleDownloads.some(entry => entry.viewkey === item.viewkey));
+    row.classList.toggle("failed", item.state === "failed");
     row.querySelector(".download-checkbox").checked = state.downloadSelected.has(item.viewkey);
-    const fileStrong = row.querySelector(".file-info strong");
-    fileStrong.textContent = item.file_name || "等待生成文件";
-    fileStrong.title = item.file_name || "";
-    row.querySelector(".file-info span").textContent = item.file_size ? formatBytes(item.file_size) : item.viewkey;
-    const status = row.querySelector(".row-status");
-    status.className = `row-status ${item.state}`;
-    const statusParts = status.querySelectorAll(".row-status-line span");
-    statusParts[0].textContent = stateText(item);
-    statusParts[1].textContent = item.speed || `${item.percent || 0}%`;
-    status.querySelector(".row-progress span").style.width = `${item.percent || 0}%`;
+    const metaFile = row.querySelector(".meta-file");
+    metaFile.textContent = item.file_name || "等待生成文件";
+    const metaSize = row.querySelector(".meta-size");
+    const metaExtra = row.querySelector(".meta-extra");
+    const separators = row.querySelectorAll(".meta-sep");
+    const extraText = item.state === "downloading" && item.speed ? item.speed : item.state === "failed" && item.error ? item.error : "";
+    metaSize.textContent = item.file_size ? formatBytes(item.file_size) : "";
+    metaExtra.textContent = extraText;
+    metaExtra.classList.toggle("is-error", item.state === "failed" && Boolean(item.error));
+    let parts = [metaFile.textContent, metaSize.textContent, extraText].filter(Boolean).length;
+    let shown = 0;
+    separators.forEach(sep => { shown += 1; sep.hidden = shown >= parts; });
+    const stateNode = row.querySelector(".download-state");
+    stateNode.className = `download-state ${item.state}`;
+    stateNode.textContent = item.state === "downloading" ? `${stateText(item)} ${item.percent || 0}%` : stateText(item);
+    row.querySelector(".row-progress span").style.width = `${item.percent || 0}%`;
     if (row.dataset.actionState !== item.state) {
       row.dataset.actionState = item.state;
       row.querySelector(".row-action").innerHTML = `${item.state === "failed"
@@ -375,6 +406,83 @@ function restartDownloadPolling() {
   state.downloadPollTimer = setInterval(() => loadDownloads(), seconds * 1000);
 }
 
+// ---- 账号登录 ----
+
+function updateAccountStatus(data) {
+  const node = $("#accountStatus");
+  if (!node) return;
+  if (data.logged_in === true) node.textContent = `已登录（${data.cookie_count || 0} 条 Cookie）`;
+  else if (data.has_cookies) node.textContent = `已保存 ${data.cookie_count} 条 Cookie，未验证是否有效，可点击「检测登录状态」`;
+  else node.textContent = "未登录。VIP 高清视频需要登录后才能下载";
+}
+
+async function loadAccount() {
+  try {
+    updateAccountStatus(await api("/api/account"));
+  } catch (_) { /* 状态获取失败不打断页面 */ }
+}
+
+async function refreshCaptcha() {
+  try {
+    const data = await api("/api/account/captcha");
+    state.captchaSid = data.sid;
+    $("#captchaImage").src = data.image;
+  } catch (error) { toast(error.message, true); }
+}
+
+function bindAccountControls() {
+  $("#captchaImage").addEventListener("click", refreshCaptcha);
+  $("#loginButton").addEventListener("click", async () => {
+    const payload = {
+      sid: state.captchaSid,
+      username: $("#accountUsername").value.trim(),
+      password: $("#accountPassword").value,
+      captcha: $("#accountCaptcha").value.trim(),
+    };
+    if (!payload.sid) { toast("请先等待验证码加载", true); return; }
+    if (!payload.username || !payload.password || !payload.captcha) { toast("请填写用户名、密码和验证码", true); return; }
+    try {
+      const result = await api("/api/account/login", {method: "POST", body: JSON.stringify(payload)});
+      toast(result.message, !result.ok);
+      if (result.ok) {
+        $("#accountPassword").value = "";
+        $("#accountCaptcha").value = "";
+      }
+      loadAccount();
+      refreshCaptcha();
+    } catch (error) {
+      toast(error.message, true);
+      refreshCaptcha();
+    }
+  });
+  $("#verifyLoginButton").addEventListener("click", async () => {
+    try {
+      const data = await api("/api/account/verify", {method: "POST"});
+      updateAccountStatus(data);
+      toast(data.message, data.logged_in !== true);
+    } catch (error) { toast(error.message, true); }
+  });
+  $("#logoutButton").addEventListener("click", async () => {
+    if (!confirm("退出登录并清除已保存的 Cookie？")) return;
+    try {
+      await api("/api/account/cookies", {method: "DELETE"});
+      state.captchaSid = null;
+      loadAccount();
+      toast("已退出登录");
+    } catch (error) { toast(error.message, true); }
+  });
+  $("#saveCookiesButton").addEventListener("click", async () => {
+    const content = $("#settingCookies").value.trim();
+    if (!content) { toast("请先粘贴 Cookie 内容", true); return; }
+    try {
+      const result = await api("/api/account/cookies", {method: "POST", body: JSON.stringify({content})});
+      $("#settingCookies").value = "";
+      toast(`已保存 ${result.cookie_count} 条 Cookie`);
+      loadAccount();
+    } catch (error) { toast(error.message, true); }
+  });
+}
+
 async function downloadSelectedTasks() {
   const keys = [...state.downloadSelected];
   if (!keys.length) return;
@@ -407,6 +515,10 @@ function setView(view, {sync = true, replace = false} = {}) {
   $("#downloadsView").classList.toggle("hidden", view !== "downloads");
   $("#settingsView").classList.toggle("hidden", view !== "settings");
   $("#searchBox").classList.toggle("hidden", view !== "catalog");
+  // 左侧分类区跟随视图切换：目录→视频分类，下载→任务分类，设置→设置分类
+  $("#categorySection").classList.toggle("hidden", view !== "catalog");
+  $("#downloadFilterSection").classList.toggle("hidden", view !== "downloads");
+  $("#settingsNavSection").classList.toggle("hidden", view !== "settings");
   $("#viewTitle").textContent = view === "catalog" ? "视频目录" : view === "downloads" ? "下载管理" : "设置中心";
   $("#viewSubtitle").innerHTML = view === "catalog"
     ? `<span id="resultCount">${visibleVideos().length}</span> 个采集结果`
@@ -417,9 +529,18 @@ function setView(view, {sync = true, replace = false} = {}) {
 
 function applyControlState() {
   document.querySelectorAll(".side-nav-item").forEach(tab => tab.classList.toggle("active", tab.dataset.view === state.activeView));
-  document.querySelectorAll(".category-item").forEach(item => item.classList.toggle("active", item.dataset.category === state.category));
+  document.querySelectorAll("#categorySection .category-item").forEach(item => item.classList.toggle("active", item.dataset.category === state.category));
+  document.querySelectorAll("#downloadFilterSection .category-item").forEach(item => item.classList.toggle("active", item.dataset.filter === state.downloadFilter));
+  document.querySelectorAll("#settingsNavSection .category-item").forEach(item => item.classList.toggle("active", item.dataset.settingsSection === state.settingsSection));
   document.querySelectorAll(".mode-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.mode === state.mode));
   document.querySelectorAll(".source-pane").forEach(pane => pane.classList.toggle("hidden", pane.dataset.pane !== state.mode));
+}
+
+// 设置中心按左侧分类真正分区：同一时间只显示一个设置分区
+function applySettingsSection() {
+  ["settingsAccount", "settingsStorage", "settingsRefresh"].forEach(id => {
+    document.getElementById(id)?.classList.toggle("hidden", id !== state.settingsSection);
+  });
 }
 
 function setJob(job) {
@@ -465,6 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
   readRoute();
   $("#searchInput").value = saved.search || "";
   applyControlState();
+  applySettingsSection();
   setView(state.activeView, {sync: false});
   syncRoute(true);
   if (window.lucide) lucide.createIcons();
@@ -479,9 +601,11 @@ document.addEventListener("DOMContentLoaded", () => {
     setView(tab.dataset.view);
     if (tab.dataset.view === "catalog" && state.videos.length === 0) loadCatalog();
     if (tab.dataset.view === "downloads") loadDownloads();
-    if (tab.dataset.view === "settings") loadSettings();
+    if (tab.dataset.view === "settings") { loadSettings(); loadAccount(); if (!state.captchaSid) refreshCaptcha(); }
   }));
-  document.querySelectorAll(".category-item").forEach(item => item.addEventListener("click", () => {
+  bindAccountControls();
+  loadAccount();
+  document.querySelectorAll("#categorySection .category-item").forEach(item => item.addEventListener("click", () => {
     state.mode = "category";
     state.category = item.dataset.category;
     state.page = 1;
@@ -526,15 +650,23 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (error) { toast(error.message, true); }
   });
   $("#selectAllDownloads").addEventListener("change", event => {
-    state.downloads.filter(item => state.downloadFilter === "completed" ? item.state === "completed" : state.downloadFilter === "pending" ? item.state !== "completed" : true).forEach(item => event.target.checked
+    downloadsMatchingFilter(state.downloadFilter).forEach(item => event.target.checked
       ? state.downloadSelected.add(item.viewkey)
       : state.downloadSelected.delete(item.viewkey));
     renderDownloads(Number($("#totalDiskUsage").dataset.bytes || 0));
   });
-  document.querySelectorAll(".download-filter").forEach(button => button.addEventListener("click", () => {
+  document.querySelectorAll("#downloadFilterSection .category-item").forEach(button => button.addEventListener("click", () => {
     state.downloadFilter = button.dataset.filter;
     $("#selectAllDownloads").checked = false;
+    applyControlState();
     renderDownloads(Number($("#totalDiskUsage").dataset.bytes || 0));
+    window.scrollTo({top: 0});
+  }));
+  document.querySelectorAll("#settingsNavSection .category-item").forEach(button => button.addEventListener("click", () => {
+    state.settingsSection = button.dataset.settingsSection;
+    persistUiState();
+    applyControlState();
+    applySettingsSection();
   }));
   $("#removeDownloadsButton").addEventListener("click", async () => {
     if (!state.downloadSelected.size) return;
@@ -615,6 +747,7 @@ document.addEventListener("DOMContentLoaded", () => {
 window.addEventListener("popstate", () => {
   readRoute();
   applyControlState();
+  applySettingsSection();
   state.selected.clear();
   render();
   setView(state.activeView, {sync: false});
