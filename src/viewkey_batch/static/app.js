@@ -355,6 +355,7 @@ function fillSettings(data) {
   state.settings = data;
   $("#settingDownloadDir").value = data.download_dir || "";
   $("#settingFolderMode").value = data.folder_mode || "flat";
+  $("#settingPreferHd").checked = Boolean(data.prefer_hd);
   $("#settingWorkers").value = data.workers;
   $("#settingFragments").value = data.fragments;
   $("#settingUiRefresh").value = data.ui_refresh_seconds;
@@ -392,6 +393,7 @@ function collectSettings() {
   return {
     download_dir: $("#settingDownloadDir").value.trim(),
     folder_mode: $("#settingFolderMode").value,
+    prefer_hd: $("#settingPreferHd").checked,
     workers: Number($("#settingWorkers").value),
     fragments: Number($("#settingFragments").value),
     ui_refresh_seconds: Number($("#settingUiRefresh").value),

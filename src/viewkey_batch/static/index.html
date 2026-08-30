@@ -7,9 +7,9 @@
   <script>
     document.documentElement.dataset.theme = localStorage.getItem("viewkey-theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=16">
+  <link rel="stylesheet" href="/static/styles.css?v=17">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
-  <script src="/static/app.js?v=16" defer></script>
+  <script src="/static/app.js?v=17" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -137,6 +137,7 @@
               <label class="settings-field" for="settingFolderMode"><span>归档方式</span><select id="settingFolderMode"><option value="flat">直接保存到目录</option><option value="date">按日期建文件夹</option><option value="category">按分类建文件夹</option><option value="date_category">按日期和分类</option></select></label>
               <label class="settings-field" for="settingWorkers"><span>并行任务数</span><input id="settingWorkers" type="number" min="1" max="8"></label>
               <label class="settings-field" for="settingFragments"><span>单任务分片数</span><input id="settingFragments" type="number" min="1" max="16"></label>
+              <label class="check-control settings-wide" title="优先解析高清版视频页，没有高清版时自动使用普通画质"><input id="settingPreferHd" type="checkbox"><span></span><span>优先获取高清视频</span></label>
             </div>
           </section>
 

@@ -63,6 +63,7 @@ def crawl(
     manifest: Path = typer.Option(Path("downloads/manifest.jsonl")),
     cookies: Path | None = typer.Option(None, help="JSON 或 Netscape Cookie 文件"),
     resolve: bool = typer.Option(True, "--resolve/--no-resolve"),
+    hd: bool = typer.Option(False, "--hd", help="优先解析高清版视频页"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """遍历分类、作者或任意列表 URL，生成 JSONL 下载清单。"""
@@ -77,7 +78,7 @@ def crawl(
             if item.identity in existing:
                 continue
             if resolve:
-                item = crawler.resolve(item)
+                item = crawler.resolve(item, prefer_hd=hd)
             append_manifest(manifest, item)
             existing.add(item.identity)
             added += 1
@@ -95,6 +96,7 @@ def download(
     rate_limit: int = typer.Option(0, min=0, help="单任务限速，字节/秒；0 为不限速"),
     cookies: Path | None = typer.Option(None, help="Netscape 格式 Cookie 文件"),
     refresh: bool = typer.Option(True, "--refresh/--no-refresh", help="下载前刷新临时视频地址"),
+    hd: bool = typer.Option(False, "--hd", help="优先解析高清版视频页"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """批量下载清单中的视频，自动使用 .part 文件续传。"""
@@ -106,7 +108,7 @@ def download(
         config = SiteConfig.load(config_path)
         with build_client(config, load_cookies(cookies)) as client:
             crawler = Crawler(client, config)
-            items = [crawler.resolve(item) for item in items]
+            items = [crawler.resolve(item, prefer_hd=hd) for item in items]
     results = BatchDownloader(output, workers, fragments, cookies, rate_limit).download(items)
     failed = [(item, error) for item, error in results if error]
     console.print(f"完成 {len(results) - len(failed)}/{len(results)}，失败 {len(failed)}")
@@ -129,6 +131,7 @@ def run_all(
     rate_limit: int = typer.Option(0, min=0, help="单任务限速，字节/秒；0 为不限速"),
     cookies_json: Path | None = typer.Option(None, help="抓取用 JSON Cookie"),
     cookies_txt: Path | None = typer.Option(None, help="下载用 Netscape Cookie"),
+    hd: bool = typer.Option(False, "--hd", help="优先解析高清版视频页"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """抓取并立即下载，不保留重复任务。"""
@@ -141,7 +144,7 @@ def run_all(
     with build_client(config, load_cookies(cookies_json)) as client:
         crawler = Crawler(client, config)
         for item in crawler.crawl(start, max_pages):
-            resolved = crawler.resolve(item)
+            resolved = crawler.resolve(item, prefer_hd=hd)
             items.append(resolved)
             if resolved.identity not in existing:
                 append_manifest(manifest, resolved)

@@ -6,6 +6,8 @@ from time import time_ns
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import logging
 
+import httpx
+
 from .http import RateLimitedClient
 from .models import SiteConfig, VideoItem
 from .parser import parse_listing, parse_video_page
@@ -27,6 +29,13 @@ def fresh_listing_url(url: str) -> str:
 
 def listing_page_url(url: str, param: str, page: int, first_page: int = 1) -> str:
     return url if page == first_page else with_page(url, param, page)
+
+
+def to_hd_url(url: str) -> str:
+    """把普通视频页地址换成高清版地址；非视频页（不含 viewkey）原样返回。"""
+    if "viewkey=" not in url:
+        return url
+    return url.replace("view_video.php", "view_video_hd.php")
 
 
 class Crawler:
@@ -53,7 +62,18 @@ class Crawler:
                 yield item
             page += 1
 
-    def resolve(self, item: VideoItem) -> VideoItem:
+    def resolve(self, item: VideoItem, prefer_hd: bool = False) -> VideoItem:
+        if prefer_hd:
+            hd_url = to_hd_url(item.page_url)
+            if hd_url != item.page_url:
+                try:
+                    response = self.client.get(hd_url)
+                    response.raise_for_status()
+                except httpx.HTTPStatusError:
+                    # 该视频没有高清版页面，回退普通页
+                    log.info("高清页不存在，回退普通页 %s", item.page_url)
+                else:
+                    return parse_video_page(response.text, str(response.url), item, self.config)
         response = self.client.get(item.page_url)
         response.raise_for_status()
         return parse_video_page(response.text, str(response.url), item, self.config)

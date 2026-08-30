@@ -16,7 +16,7 @@ def test_web_index_loads():
     assert "91Fetch" in response.text
     assert "下载所选" in response.text
     assert "no-store" in response.headers["cache-control"]
-    assert "app.js?v=16" in response.text
+    assert "app.js?v=17" in response.text
     assert "账号安全" not in response.text
     assert "定时下载" not in response.text
 

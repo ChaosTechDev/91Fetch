@@ -41,6 +41,7 @@ SETTINGS_PATH = DATA_DIR / "settings.json"
 class AppSettings(BaseModel):
     download_dir: str = ""
     folder_mode: Literal["flat", "date", "category", "date_category"] = "flat"
+    prefer_hd: bool = False
     workers: int = Field(2, ge=1, le=8)
     fragments: int = Field(4, ge=1, le=16)
     ui_refresh_seconds: int = Field(3, ge=1, le=60)
@@ -393,6 +394,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
             return
         job.status = "running"
         config = SiteConfig.load(CONFIG_PATH)
+        prefer_hd = settings_store.snapshot().prefer_hd
         with store.lock:
             items = [store.videos[key] for key in request.viewkeys if key in store.videos]
         job.total = len(items)
@@ -436,7 +438,7 @@ def download_worker(job: Job, request: DownloadRequest) -> None:
                 if fresh_link:
                     # 用副本更新 page_url，避免在锁外修改 store 里的共享对象
                     item = replace(item, page_url=fresh_link.page_url)
-                fresh = crawler.resolve(item)
+                fresh = crawler.resolve(item, prefer_hd=prefer_hd)
                 thumb_match = re.search(r"/thumb/(?:\d+_)?(\d+)\.jpg", fresh.thumbnail_url, re.I)
                 media_match = re.search(r"/mp4\d*/(\d+)\.mp4", fresh.stream_url, re.I)
                 if thumb_match and media_match and thumb_match.group(1) != media_match.group(1):
