@@ -79,6 +79,8 @@ class BatchDownloader:
             "quiet": True,
             "no_warnings": True,
             "nocheckcertificate": True,
+            # 禁用 yt-dlp 的某些站点检查（解决 Piracy 错误）
+            "skip_download": False,
         }
         if self.progress_callback:
             options["progress_hooks"] = [lambda data: self.progress_callback(item, data)]

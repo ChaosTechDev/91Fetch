@@ -5,8 +5,9 @@
 - 🔒 **Critical**: 修复登录时 Cookie 保存顺序错误（session.close() 调整到 save_session_cookies() 之后）
 - ✨ **Compatibility**: 扩大端口探测范围从 20 到 100，提升 Windows 环境下启动成功率
 - 📝 **Documentation**: 新增 BUG_AUDIT_REPORT.md 和 FINAL_SUMMARY.md，完整的技术审计报告
+- 🔧 **Network**: 修复 yt-dlp 盗版网站检测导致的下载失败问题，现在可以正常下载视频
 
-> **建议**: 强烈建议所有用户升级到 v1.1.6，特别是遇到登录失效问题的用户
+> **建议**: 强烈建议所有用户升级到 v1.1.6，特别是遇到登录失效或下载 Piracy 错误的用户
 
 ## 1.1.5
 
