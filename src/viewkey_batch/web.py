@@ -890,10 +890,11 @@ def account_login(request: LoginRequest) -> dict:
         return {"ok": False, "message": "网络请求失败，请重试"}
     html = response.text
     lowered = html.lower()
-    # 登录会话一次性使用，无论成败都释放连接；Cookie 已在会话对象里，关闭客户端不影响读取
-    session.close()
+    # BUG FIX (#8): Cookie must be saved BEFORE closing session
+    # If we close first, save_session_cookies() can't read the cookie jar from RateLimitedClient
     if "logout" in lowered or "退出" in html:
         count = save_session_cookies(session)
+        session.close()
         return {"ok": True, "message": "登录成功", "cookie_count": count}
     if "验证码" in html or "captcha" in lowered:
         message = "登录失败：验证码错误"
@@ -901,6 +902,7 @@ def account_login(request: LoginRequest) -> dict:
         message = "登录失败：用户名或密码错误"
     else:
         message = "登录失败，请检查账号信息后重试"
+    session.close()
     return {"ok": False, "message": message}
 
 
@@ -945,7 +947,7 @@ def verify_login() -> dict:
 
 
 def available_port(start: int = 8765) -> int:
-    for port in range(start, start + 20):
+    for port in range(start, start + 100):
         with socket.socket() as sock:
             if sock.connect_ex(("127.0.0.1", port)) != 0:
                 return port
