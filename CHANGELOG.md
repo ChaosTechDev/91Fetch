@@ -2,15 +2,11 @@
 
 ## 1.1.6 (Bug Fix Release)
 
-- 🔒 **Critical**: 修复登录 Cookie 保存顺序错误，确保登录后 Cookie 正确保存（session.close() 调整到 save_session_cookies() 之后）
-- 🔧 **High**: 解决下载队列竞态条件问题，防止重复任务和状态混乱（合并两次锁调用，减少竞争窗口）
-- 🌐 **Network**: 增加 SSL/传输错误自动重试机制，瞬时网络波动不再导致整个定时任务失败（单页面级重试 + 细粒度容错）
-- 🔄 **Scheduler**: 修复定时任务失败后下次时间未重置的问题，避免卡死在故障时间点（自动顺延至下一周期）
-- ✨ **Compatibility**: 扩大端口探测范围从 20 到 100，提升高密度环境下的启动成功率
-- 📝 **Documentation**: 新增 BUG_AUDIT_REPORT.md 和 FINAL_SUMMARY.md，完整的技术审计报告和使用指南
-- ✅ **Testing**: 全部 47 个单元测试通过，无破坏性变更
+- 🔒 **Critical**: 修复登录时 Cookie 保存顺序错误（session.close() 调整到 save_session_cookies() 之后）
+- ✨ **Compatibility**: 扩大端口探测范围从 20 到 100，提升 Windows 环境下启动成功率
+- 📝 **Documentation**: 新增 BUG_AUDIT_REPORT.md 和 FINAL_SUMMARY.md，完整的技术审计报告
 
-> **建议**: 强烈建议所有用户升级到 v1.1.6，特别是遇到登录失效、SSL 错误或定时任务失败的案例
+> **建议**: 强烈建议所有用户升级到 v1.1.6，特别是遇到登录失效问题的用户
 
 ## 1.1.5
 
